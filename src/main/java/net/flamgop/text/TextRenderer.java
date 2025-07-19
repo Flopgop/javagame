@@ -4,7 +4,6 @@ import net.flamgop.ResourceHelper;
 import net.flamgop.gpu.GPUBuffer;
 import net.flamgop.gpu.ShaderProgram;
 import net.flamgop.gpu.VertexBuffer;
-import org.graalvm.collections.Pair;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
@@ -19,6 +18,8 @@ import static org.lwjgl.opengl.GL31.glDrawElementsInstanced;
 import static org.lwjgl.opengl.GL45.glBindTextureUnit;
 
 public class TextRenderer {
+
+    private static final int FLOATS_PER_INSTANCE = 8;
 
     private final VertexBuffer unitQuad;
     private final ShaderProgram textShader;
@@ -61,13 +62,12 @@ public class TextRenderer {
         unitQuad.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
     }
 
-    private Pair<Float, Boolean> addCharacterToBuffer(Font font, char c, float x, float y, float scale, FloatBuffer buffer) {
+    private float addCharacterToBuffer(Font font, char c, float x, float y, float scale, FloatBuffer buffer) {
         Glyph glyph = font.glyphs().get(c);
         if (glyph == null) {
-            return Pair.create((font.glyphs().get(' ').advance() >> 6) * scale, false);
+            return (font.glyphs().get(' ').advance() >> 6) * scale;
         }
 
-        boolean advanced = !glyph.isEmpty();
         if (!glyph.isEmpty()) {
             float xPos = x + glyph.bearing().x * scale;
             float yPos = y - (glyph.size().y - glyph.bearing().y) * scale;
@@ -83,22 +83,42 @@ public class TextRenderer {
             buffer.put(w);
             buffer.put(h);
         }
-        return Pair.create((glyph.advance() >> 6) * scale, advanced);
+        return (glyph.advance() >> 6) * scale;
     }
 
     public void drawText(Font font, String text, float x, float y, float scale, Vector3f color) {
+        FloatBuffer instanceData = computeTextBuffer(font, text, x, y, scale);
+
+        drawBufferedText(font, instanceData, color);
+
+        MemoryUtil.memFree(instanceData);
+    }
+
+    public void drawTextWrapped(Font font, String text, float x, float y, float scale, Vector3f color, float maxWidth) {
+        FloatBuffer instanceData = computeTextBufferWrapped(font, text, x, y, scale, maxWidth);
+
+        drawBufferedText(font, instanceData, color);
+
+        MemoryUtil.memFree(instanceData);
+    }
+
+    // this avoids safety checks for speed reasons
+    public void drawBufferedText(Font font, FloatBuffer buffer, Vector3f color) {
         textShader.use();
         glUniform3f(textColorUniformLocation, color.x, color.y, color.z);
         glBindVertexArray(unitQuad.handle());
         glBindTextureUnit(0, font.atlas().handle());
+        textUVBuffer.allocate(buffer);
+        glDrawElementsInstanced(GL_TRIANGLES, unitQuad.indexCount(), GL_UNSIGNED_INT, 0, buffer.remaining() / FLOATS_PER_INSTANCE);
+        glBindVertexArray(0);
+        glBindTextureUnit(0, 0);
+    }
 
+    public FloatBuffer computeTextBuffer(Font font, String text, float x, float y, float scale) {
         float originX = x;
-        float originY = y;
 
         int maxInstances = text.length();
         FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * Float.BYTES * maxInstances);
-
-        int instanceCount = 0;
 
         for (char c : text.toCharArray()) {
             if (c == '\n') {
@@ -106,33 +126,18 @@ public class TextRenderer {
                 x = originX;
                 continue;
             }
-            Pair<Float, Boolean> result = addCharacterToBuffer(font, c, x, y, scale, instanceData);
-            x += result.getLeft();
-            if (result.getRight()) instanceCount++;
+            float ascent = addCharacterToBuffer(font, c, x, y, scale, instanceData);
+            x += ascent;
         }
         instanceData.flip();
-
-        textUVBuffer.allocate(instanceData);
-        glDrawElementsInstanced(GL_TRIANGLES, unitQuad.indexCount(), GL_UNSIGNED_INT, 0, instanceCount);
-        MemoryUtil.memFree(instanceData);
-
-        glBindVertexArray(0);
-        glBindTextureUnit(0, 0);
+        return instanceData;
     }
 
-    public void drawTextWrapped(Font font, String text, float x, float y, float scale, Vector3f color, float maxWidth) {
-        textShader.use();
-        glUniform3f(textColorUniformLocation, color.x, color.y, color.z);
-        glBindVertexArray(unitQuad.handle());
-        glBindTextureUnit(0, font.atlas().handle());
-
+    public FloatBuffer computeTextBufferWrapped(Font font, String text, float x, float y, float scale, float maxWidth) {
         float originX = x;
-        float originY = y;
 
         int maxInstances = text.length();
         FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * Float.BYTES * maxInstances);
-
-        int instanceCount = 0;
 
         for (char c : text.toCharArray()) {
             if (c == '\n' || x - originX > maxWidth) {
@@ -140,18 +145,10 @@ public class TextRenderer {
                 x = originX;
                 if (c == '\n') continue;
             }
-
-            Pair<Float, Boolean> result = addCharacterToBuffer(font, c, x, y, scale, instanceData);
-            x += result.getLeft();
-            if (result.getRight()) instanceCount++;
+            float ascent = addCharacterToBuffer(font, c, x, y, scale, instanceData);
+            x += ascent;
         }
         instanceData.flip();
-
-        textUVBuffer.allocate(instanceData);
-        glDrawElementsInstanced(GL_TRIANGLES, unitQuad.indexCount(), GL_UNSIGNED_INT, 0, instanceCount);
-        MemoryUtil.memFree(instanceData);
-
-        glBindVertexArray(0);
-        glBindTextureUnit(0, 0);
+        return instanceData;
     }
 }
