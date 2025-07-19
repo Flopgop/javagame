@@ -54,7 +54,7 @@ public class Font {
     private final ByteBuffer textAtlasBuffer;
     private final FT_Face typeface;
 
-    public Font(ByteBuffer ttf, int glyphCount, int textAtlasWidth, int textAtlasHeight) {
+    public Font(ByteBuffer ttf, int glyphCount, int characterPadding, int textAtlasWidth, int textAtlasHeight) {
         this.textAtlasWidth = textAtlasWidth;
         this.textAtlasHeight = textAtlasHeight;
 
@@ -67,7 +67,7 @@ public class Font {
         FreeType.FT_Set_Pixel_Sizes(typeface, 0, 48);
 
         textAtlasBuffer = MemoryUtil.memAlloc(textAtlasWidth * textAtlasHeight);
-        generateAtlas(glyphCount);
+        generateAtlas(glyphCount, characterPadding);
 
         textAtlasTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
         textAtlasTexture.storage(1, GL_R8, textAtlasWidth, textAtlasHeight);
@@ -83,7 +83,7 @@ public class Font {
     }
 
     @SuppressWarnings("resource")
-    private void generateAtlas(int glyphCount) {
+    private void generateAtlas(int glyphCount, int characterPadding) {
         int x = 0;
         int y = 0;
         int rowHeight = 0;
@@ -131,7 +131,7 @@ public class Font {
 
             this.glyphs.put(c, new Glyph(new Vector4f(u0, v0, u1-u0, v1-v0), new Vector2f(w, h), new Vector2f(glyph.bitmap_left(), glyph.bitmap_top()), (int) glyph.advance().x(), false));
 
-            x += w;
+            x += w + characterPadding;
             if (h > rowHeight) {
                 rowHeight = h;
             }

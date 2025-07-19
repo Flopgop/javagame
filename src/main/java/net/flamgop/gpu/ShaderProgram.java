@@ -15,7 +15,6 @@ public class ShaderProgram {
         glShaderSource(shader, shaderSource);
         glCompileShader(shader);
         if (glGetShaderi(shader, GL_COMPILE_STATUS) == GL_FALSE) {
-            System.err.println(glGetShaderInfoLog(shader));
             throw new RuntimeException(glGetShaderInfoLog(shader));
         }
         glAttachShader(handle, shader);
@@ -25,7 +24,6 @@ public class ShaderProgram {
     public void link() {
         glLinkProgram(handle);
         if (glGetProgrami(handle, GL_LINK_STATUS) == GL_FALSE) {
-            System.err.println(glGetProgramInfoLog(handle));
             throw new RuntimeException("Program linking failed:\n" + glGetProgramInfoLog(handle));
         }
     }

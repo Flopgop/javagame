@@ -17,13 +17,13 @@ import static org.lwjgl.opengl.GL46.*;
 
 public class Game {
 
-    private static final float[] QUAD_VERTICES = new float[]{
+    private static final float[] FRAMEBUFFER_QUAD_VERTICES = new float[]{
             -1, 0, -1,  0, 1, 0,  0, 0, // vertex position, normal, uv
              1, 0, -1,  0, 1, 0,  1, 0,
              1, 0,  1,  0, 1, 0,  1, 1,
             -1, 0,  1,  0, 1, 0,  0, 1
     };
-    private static final int[] QUAD_INDICES = new int[]{
+    private static final int[] FRAMEBUFFER_QUAD_INDICES = new int[]{
             0, 1, 2,  2, 3, 0
     };
 
@@ -45,9 +45,9 @@ public class Game {
     private final TextRenderer textRenderer;
     private final Font font;
 
-    public Game() {
-        System.loadLibrary("renderdoc");
+    private double frameTime = 1.0f;
 
+    public Game() {
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
 
         GLFW.glfwDefaultWindowHints();
@@ -73,7 +73,7 @@ public class Game {
         textRenderer = new TextRenderer();
 
         quad = new VertexBuffer();
-        quad.data(QUAD_VERTICES, 8*Float.BYTES, QUAD_INDICES);
+        quad.data(FRAMEBUFFER_QUAD_VERTICES, 8*Float.BYTES, FRAMEBUFFER_QUAD_INDICES);
         quad.attribute(0, 3, GL_FLOAT, false, 0);
         quad.attribute(1, 3, GL_FLOAT, false, 3 * Float.BYTES);
         quad.attribute(2, 2, GL_FLOAT, false, 6 * Float.BYTES);
@@ -107,7 +107,7 @@ public class Game {
 
         sphereTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
 
-        font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 1024, 1024, 1024);
+        font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
         font.writeAtlasToDisk(new File("font.png"));
     }
@@ -116,9 +116,11 @@ public class Game {
         GLFW.glfwShowWindow(this.window);
 
         while (!this.shouldClose()) {
-            this.update();
-            this.render();
+            double time = GLFW.glfwGetTime();
+            this.update(frameTime);
+            this.render(frameTime);
             this.swap();
+            frameTime = GLFW.glfwGetTime() - time;
         }
 
         this.cleanup();
@@ -128,16 +130,14 @@ public class Game {
         return GLFW.glfwWindowShouldClose(this.window);
     }
 
-    private void update() {
+    private void update(double delta) {
         GLFW.glfwPollEvents();
 
-        double t = GLFW.glfwGetTime();
-
-        sphereModel.model.identity().rotateY((float)t%360f);
+        sphereModel.model.rotateY((float)delta);
         modelUniformBuffer.store(sphereModel);
     }
 
-    private void render() {
+    private void render(double delta) {
         glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // backbuffer color is bright fucking red so that we know when the framebuffer isn't drawing properly
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         framebuffer.clear(0.2f, 0.2f, 0.2f, 1.0f);
@@ -154,7 +154,6 @@ public class Game {
         pbrUniformBuffer.bind(2);
         pbr.use();
         glBindTextureUnit(0, sphereTexture.handle());
-//        sphere.draw();
         testModel.draw(pbr);
 
         glDisable(GL_CULL_FACE);
@@ -167,8 +166,8 @@ public class Game {
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        textRenderer.drawText(font, "sample tExt", 25f, 25f, 1.0f, new Vector3f(0.5f, 0.8f, 0.2f));
-        textRenderer.drawText(font, "FLOCK and WALLS", 25f, 80f, 1.0f, new Vector3f(0.5f, 0.8f, 0.2f));
+        textRenderer.drawText(font, "Sample text: Él jóven, naïve garçon goûta piñata süßigkeiten und exclaimed, ‘¡Qué délicieux!", 25f, 25f, 0.5f, new Vector3f(0.5f, 0.8f, 0.2f));
+        textRenderer.drawText(font, String.format("FPS: %.2f", 1.0 / delta), 25f, 50f, 0.5f, new Vector3f(0.5f, 0.8f, 0.2f));
         glDisable(GL_BLEND);
     }
 
@@ -182,6 +181,11 @@ public class Game {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0) {
+            if (args[0].equalsIgnoreCase("-renderdoc")) {
+                System.loadLibrary("renderdoc");
+            }
+        }
         Game game = new Game();
         game.start();
     }
