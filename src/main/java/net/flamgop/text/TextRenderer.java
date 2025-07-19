@@ -66,12 +66,20 @@ public class TextRenderer {
         glBindVertexArray(unitQuad.handle());
         glBindTextureUnit(0, font.atlas().handle());
 
+        float originX = x;
+        float originY = y;
+
         int maxInstances = text.length();
         FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * Float.BYTES * maxInstances);
 
         int instanceCount = 0;
 
         for (char c : text.toCharArray()) {
+            if (c == '\n') {
+                y -= font.lineHeight() * scale;
+                x = originX;
+                continue;
+            }
             Glyph glyph = font.glyphs().get(c);
             if (glyph == null) {
                 x += (font.glyphs().get(' ').advance() >> 6) * scale;

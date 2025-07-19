@@ -5,10 +5,7 @@ import org.joml.Vector2f;
 import org.joml.Vector4f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryUtil;
-import org.lwjgl.util.freetype.FT_Bitmap;
-import org.lwjgl.util.freetype.FT_Face;
-import org.lwjgl.util.freetype.FT_GlyphSlot;
-import org.lwjgl.util.freetype.FreeType;
+import org.lwjgl.util.freetype.*;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -49,7 +46,7 @@ public class Font {
     }
 
     private final Map<Character, Glyph> glyphs = new HashMap<>();
-    private final int textAtlasWidth, textAtlasHeight;
+    private final int textAtlasWidth, textAtlasHeight, lineHeight;
     private final GPUTexture textAtlasTexture;
     private final ByteBuffer textAtlasBuffer;
     private final FT_Face typeface;
@@ -76,6 +73,13 @@ public class Font {
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        FT_Size_Metrics metrics = typeface.size().metrics();
+        long ascent = metrics.ascender() >> 6;
+        long descent = metrics.descender() >> 6;
+        long lineGap = (metrics.height() >> 6) - ascent + descent;
+
+        this.lineHeight = (int)(ascent - descent + lineGap);
     }
 
     public GPUTexture atlas() {
@@ -145,6 +149,10 @@ public class Font {
             throw new IllegalStateException("Couldn't create my font typeface! code: " + ret);
         }
         return FT_Face.create(pTypeFace.get(0));
+    }
+
+    public int lineHeight() {
+        return this.lineHeight;
     }
 
     public Map<Character, Glyph> glyphs() {
