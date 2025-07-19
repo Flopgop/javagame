@@ -166,7 +166,7 @@ public class Game {
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        textRenderer.drawText(font, String.format("FPS: %.2f", 1.0 / delta) + "\nSample text: Él jóven, naïve garçon goûta piñata\nsüßigkeiten und exclaimed, ‘¡Qué délicieux!", 25f, 75f, 0.5f, new Vector3f(0.5f, 0.8f, 0.2f));
+        textRenderer.drawTextWrapped(font, String.format("FPS: %.2f", 1.0 / delta) + "\nSample text: Él jóven, naïve garçon goûta piñata süßigkeiten und exclaimed, ‘¡Qué délicieux!", 25f, 75f, 0.5f, new Vector3f(0.5f, 0.8f, 0.2f), 600);
         glDisable(GL_BLEND);
     }
 

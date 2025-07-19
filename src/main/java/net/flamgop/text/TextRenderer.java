@@ -4,6 +4,7 @@ import net.flamgop.ResourceHelper;
 import net.flamgop.gpu.GPUBuffer;
 import net.flamgop.gpu.ShaderProgram;
 import net.flamgop.gpu.VertexBuffer;
+import org.graalvm.collections.Pair;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
@@ -60,6 +61,31 @@ public class TextRenderer {
         unitQuad.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
     }
 
+    private Pair<Float, Boolean> addCharacterToBuffer(Font font, char c, float x, float y, float scale, FloatBuffer buffer) {
+        Glyph glyph = font.glyphs().get(c);
+        if (glyph == null) {
+            return Pair.create((font.glyphs().get(' ').advance() >> 6) * scale, false);
+        }
+
+        boolean advanced = !glyph.isEmpty();
+        if (!glyph.isEmpty()) {
+            float xPos = x + glyph.bearing().x * scale;
+            float yPos = y - (glyph.size().y - glyph.bearing().y) * scale;
+
+            float w = glyph.size().x * scale;
+            float h = glyph.size().y * scale;
+            buffer.put(glyph.uv().x());
+            buffer.put(glyph.uv().y());
+            buffer.put(glyph.uv().z());
+            buffer.put(glyph.uv().w());
+            buffer.put(xPos);
+            buffer.put(yPos);
+            buffer.put(w);
+            buffer.put(h);
+        }
+        return Pair.create((glyph.advance() >> 6) * scale, advanced);
+    }
+
     public void drawText(Font font, String text, float x, float y, float scale, Vector3f color) {
         textShader.use();
         glUniform3f(textColorUniformLocation, color.x, color.y, color.z);
@@ -80,29 +106,44 @@ public class TextRenderer {
                 x = originX;
                 continue;
             }
-            Glyph glyph = font.glyphs().get(c);
-            if (glyph == null) {
-                x += (font.glyphs().get(' ').advance() >> 6) * scale;
-                continue;
+            Pair<Float, Boolean> result = addCharacterToBuffer(font, c, x, y, scale, instanceData);
+            x += result.getLeft();
+            if (result.getRight()) instanceCount++;
+        }
+        instanceData.flip();
+
+        textUVBuffer.allocate(instanceData);
+        glDrawElementsInstanced(GL_TRIANGLES, unitQuad.indexCount(), GL_UNSIGNED_INT, 0, instanceCount);
+        MemoryUtil.memFree(instanceData);
+
+        glBindVertexArray(0);
+        glBindTextureUnit(0, 0);
+    }
+
+    public void drawTextWrapped(Font font, String text, float x, float y, float scale, Vector3f color, float maxWidth) {
+        textShader.use();
+        glUniform3f(textColorUniformLocation, color.x, color.y, color.z);
+        glBindVertexArray(unitQuad.handle());
+        glBindTextureUnit(0, font.atlas().handle());
+
+        float originX = x;
+        float originY = y;
+
+        int maxInstances = text.length();
+        FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * Float.BYTES * maxInstances);
+
+        int instanceCount = 0;
+
+        for (char c : text.toCharArray()) {
+            if (c == '\n' || x - originX > maxWidth) {
+                y -= font.lineHeight() * scale;
+                x = originX;
+                if (c == '\n') continue;
             }
 
-            if (!glyph.isEmpty()) {
-                float xPos = x + glyph.bearing().x * scale;
-                float yPos = y - (glyph.size().y - glyph.bearing().y) * scale;
-
-                float w = glyph.size().x * scale;
-                float h = glyph.size().y * scale;
-                instanceData.put(glyph.uv().x());
-                instanceData.put(glyph.uv().y());
-                instanceData.put(glyph.uv().z());
-                instanceData.put(glyph.uv().w());
-                instanceData.put(xPos);
-                instanceData.put(yPos);
-                instanceData.put(w);
-                instanceData.put(h);
-                instanceCount++;
-            }
-            x += (glyph.advance() >> 6) * scale;
+            Pair<Float, Boolean> result = addCharacterToBuffer(font, c, x, y, scale, instanceData);
+            x += result.getLeft();
+            if (result.getRight()) instanceCount++;
         }
         instanceData.flip();
 
