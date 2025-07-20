@@ -7,15 +7,13 @@ import org.lwjgl.util.par.ParShapesMesh;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.lwjgl.opengl.GL46.*;
 
 public class VertexBuffer {
 
     private final int vao;
-    private final List<GPUBuffer> buffers = new ArrayList<>();
+    private final GPUBuffer[] buffers;
 
     private GPUBuffer elementBuffer;
     private int indexCount = 0;
@@ -92,6 +90,7 @@ public class VertexBuffer {
 
     public VertexBuffer() {
         this.vao = glCreateVertexArrays();
+        this.buffers = new GPUBuffer[glGetInteger(GL_MAX_VERTEX_ATTRIBS)];
     }
 
     public int handle() {
@@ -129,7 +128,7 @@ public class VertexBuffer {
     }
 
     public void buffer(GPUBuffer buffer, int bindingIndex, int offset, int stride) {
-        buffers.add(buffer);
+        buffers[bindingIndex] = buffer;
         glVertexArrayVertexBuffer(vao, bindingIndex, buffer.handle(), offset, stride);
     }
 
@@ -157,6 +156,8 @@ public class VertexBuffer {
     public void destroy() {
         glDeleteVertexArrays(vao);
         this.elementBuffer.destroy();
-        this.buffers.forEach(GPUBuffer::destroy);
+        for (GPUBuffer buffer : buffers) {
+            if (buffer != null) buffer.destroy();
+        }
     }
 }

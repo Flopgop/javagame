@@ -54,6 +54,9 @@ public class GPUTexture {
 
     public GPUTexture(TextureTarget target) {
         this.handle = glCreateTextures(target.glQualifier);
+        if (handle == 0) {
+            throw new IllegalStateException("Failed to create a new GPU texture");
+        }
         this.target = target;
     }
 

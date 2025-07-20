@@ -28,6 +28,10 @@ public class ShaderProgram {
         }
     }
 
+    public int getUniformLocation(String uniformName) {
+        return glGetUniformLocation(handle, uniformName);
+    }
+
     public int handle() {
         return handle;
     }

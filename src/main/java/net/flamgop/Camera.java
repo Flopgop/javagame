@@ -2,6 +2,7 @@ package net.flamgop;
 
 import net.flamgop.gpu.GPUBuffer;
 import net.flamgop.gpu.UniformBuffer;
+import net.flamgop.input.InputState;
 import net.flamgop.uniform.CameraUniformData;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -106,6 +107,14 @@ public class Camera {
     }
 
     public Vector3f up() {
-        return new Vector3f(this.up);
+        return new Vector3f(this.up).normalize();
+    }
+
+    public Vector3f forward() {
+        return target().sub(this.position()).normalize();
+    }
+
+    public Vector3f right() {
+        return forward().cross(this.up()).normalize();
     }
 }
