@@ -32,7 +32,7 @@ public class Game {
 
     private final long window;
 
-    private final ShaderProgram blit;
+//    private final ShaderProgram blit;
     private final VertexBuffer quad;
     private final GPUFramebuffer framebuffer;
 
@@ -42,7 +42,7 @@ public class Game {
     private GPUTexture gbufferNormalTexture;
     private GPUTexture gbufferColorTexture;
 
-    private final ShaderProgram pbr;
+//    private final ShaderProgram pbr;
     private final UniformBuffer pbrUniformBuffer;
     private final UniformBuffer modelUniformBuffer;
     private final GPUTexture sphereTexture;
@@ -91,15 +91,15 @@ public class Game {
         GLFW.glfwMakeContextCurrent(this.window);
         GL.createCapabilities();
 
-        blit = new ShaderProgram();
-        blit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("blit.vertex.glsl"), GL_VERTEX_SHADER);
-        blit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("blit.fragment.glsl"), GL_FRAGMENT_SHADER);
-        blit.link();
-
-        pbr = new ShaderProgram();
-        pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.vertex.glsl"), GL_VERTEX_SHADER);
-        pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.fragment.glsl"), GL_FRAGMENT_SHADER);
-        pbr.link();
+//        blit = new ShaderProgram();
+//        blit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("blit.vertex.glsl"), GL_VERTEX_SHADER);
+//        blit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("blit.fragment.glsl"), GL_FRAGMENT_SHADER);
+//        blit.link();
+//
+//        pbr = new ShaderProgram();
+//        pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.vertex.glsl"), GL_VERTEX_SHADER);
+//        pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.fragment.glsl"), GL_FRAGMENT_SHADER);
+//        pbr.link();
 
         gbuffer = new ShaderProgram();
         gbuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.vertex.glsl"), GL_VERTEX_SHADER);
