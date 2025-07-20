@@ -1,6 +1,9 @@
 package net.flamgop;
 
 import net.flamgop.gpu.*;
+import net.flamgop.gpu.buffer.GPUBuffer;
+import net.flamgop.gpu.buffer.ShaderStorageBuffer;
+import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.input.InputSequenceHandler;
 import net.flamgop.input.InputState;
 import net.flamgop.text.Font;
@@ -10,6 +13,7 @@ import net.flamgop.uniform.PBRUniformData;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 
@@ -19,6 +23,43 @@ import java.nio.IntBuffer;
 import static org.lwjgl.opengl.GL46.*;
 
 public class Game {
+
+    private static String getSourceString(int source) {
+        return switch (source) {
+            case GL_DEBUG_SOURCE_API -> "API";
+            case GL_DEBUG_SOURCE_WINDOW_SYSTEM -> "Window System";
+            case GL_DEBUG_SOURCE_SHADER_COMPILER -> "Shader Compiler";
+            case GL_DEBUG_SOURCE_THIRD_PARTY -> "Third Party";
+            case GL_DEBUG_SOURCE_APPLICATION -> "Application";
+            case GL_DEBUG_SOURCE_OTHER -> "Other";
+            default -> "Unknown";
+        };
+    }
+
+    private static String getTypeString(int type) {
+        return switch (type) {
+            case GL_DEBUG_TYPE_ERROR -> "Error";
+            case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR -> "Deprecated Behavior";
+            case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR -> "Undefined Behavior";
+            case GL_DEBUG_TYPE_PORTABILITY -> "Portability";
+            case GL_DEBUG_TYPE_PERFORMANCE -> "Performance";
+            case GL_DEBUG_TYPE_MARKER -> "Marker";
+            case GL_DEBUG_TYPE_PUSH_GROUP -> "Push Group";
+            case GL_DEBUG_TYPE_POP_GROUP -> "Pop Group";
+            case GL_DEBUG_TYPE_OTHER -> "Other";
+            default -> "Unknown";
+        };
+    }
+
+    private static String getSeverityString(int severity) {
+        return switch (severity) {
+            case GL_DEBUG_SEVERITY_HIGH -> "High";
+            case GL_DEBUG_SEVERITY_MEDIUM -> "Medium";
+            case GL_DEBUG_SEVERITY_LOW -> "Low";
+            case GL_DEBUG_SEVERITY_NOTIFICATION -> "Notification";
+            default -> "Unknown";
+        };
+    }
 
     private static final float[] FRAMEBUFFER_QUAD_VERTICES = new float[]{
             -1, 0, -1,  0, 1, 0,  0, 0, // vertex position, normal, uv
@@ -32,21 +73,24 @@ public class Game {
 
     private final long window;
 
-//    private final ShaderProgram blit;
-    private final VertexBuffer quad;
+    private final VertexArray quad;
     private final GPUFramebuffer framebuffer;
 
-    private final ShaderProgram gbuffer;
-    private final ShaderProgram gbufferBlit;
-    private GPUTexture gbufferPositionTexture;
-    private GPUTexture gbufferNormalTexture;
-    private GPUTexture gbufferColorTexture;
+    private final ShaderProgram gBuffer;
+    private final ShaderProgram gBufferBlit;
+    private GPUTexture gBufferPositionTexture;
+    private GPUTexture gBufferNormalTexture;
+    private GPUTexture gBufferColorTexture;
 
-//    private final ShaderProgram pbr;
+    private final ShaderStorageBuffer lightSSBO;
     private final UniformBuffer pbrUniformBuffer;
     private final UniformBuffer modelUniformBuffer;
-    private final GPUTexture sphereTexture;
-    private final ModelUniformData sphereModel;
+    private final GPUTexture modelTexture;
+    private final ModelUniformData model;
+    private final UniformBuffer model1UniformBuffer;
+    private final ModelUniformData model1;
+
+//    private final ShaderProgram unshadedForward;
 
     private final Model testModel;
 
@@ -63,7 +107,8 @@ public class Game {
     private final InputSequenceHandler inputSequenceHandler;
     private final InputState inputState;
 
-    private float speed = 2.0f;
+    @SuppressWarnings("FieldCanBeLocal")
+    private final float defaultSpeed = 2.0f;
     private int width, height;
 
     public Game() {
@@ -77,7 +122,9 @@ public class Game {
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 6);
         GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE);
         GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
+        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_DEBUG_CONTEXT, GLFW.GLFW_TRUE);
         this.window = GLFW.glfwCreateWindow(width, height, "game", 0L, 0L);
+        GLFWErrorCallback.createPrint(System.err).set();
 
         this.inputSequenceHandler = new InputSequenceHandler();
         this.inputState = new InputState();
@@ -91,58 +138,59 @@ public class Game {
         GLFW.glfwMakeContextCurrent(this.window);
         GL.createCapabilities();
 
-//        blit = new ShaderProgram();
-//        blit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("blit.vertex.glsl"), GL_VERTEX_SHADER);
-//        blit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("blit.fragment.glsl"), GL_FRAGMENT_SHADER);
-//        blit.link();
-//
-//        pbr = new ShaderProgram();
-//        pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.vertex.glsl"), GL_VERTEX_SHADER);
-//        pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.fragment.glsl"), GL_FRAGMENT_SHADER);
-//        pbr.link();
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, (IntBuffer) null, true);
+        glDebugMessageCallback((source, type, id, severity, _, message, _) -> {
+            System.out.println("OpenGL Debug Message:");
+            System.out.println("  Source  : " + getSourceString(source));
+            System.out.println("  Type    : " + getTypeString(type));
+            System.out.println("  ID      : " + id);
+            System.out.println("  Severity: " + getSeverityString(severity));
+            System.out.println("  Message : " + message);
+            System.out.println();
+        }, 0L);
 
-        gbuffer = new ShaderProgram();
-        gbuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.vertex.glsl"), GL_VERTEX_SHADER);
-        gbuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.fragment.glsl"), GL_FRAGMENT_SHADER);
-        gbuffer.link();
+        gBuffer = new ShaderProgram();
+        gBuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.vertex.glsl"), GL_VERTEX_SHADER);
+        gBuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.fragment.glsl"), GL_FRAGMENT_SHADER);
+        gBuffer.link();
 
-        gbufferBlit = new ShaderProgram();
-        gbufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.vertex.glsl"), GL_VERTEX_SHADER);
-        gbufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.fragment.glsl"), GL_FRAGMENT_SHADER);
-        gbufferBlit.link();
+        gBufferBlit = new ShaderProgram();
+        gBufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.vertex.glsl"), GL_VERTEX_SHADER);
+        gBufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.fragment.glsl"), GL_FRAGMENT_SHADER);
+        gBufferBlit.link();
 
-        gbufferBlit.use();
-        glUniform1i(gbufferBlit.getUniformLocation("gbuffer_position"), 0);
-        glUniform1i(gbufferBlit.getUniformLocation("gbuffer_normal"), 1);
-        glUniform1i(gbufferBlit.getUniformLocation("gbuffer_color"), 2);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_position"), 0);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_normal"), 1);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
         
         textRenderer = new TextRenderer(width, height);
 
-        quad = new VertexBuffer();
+        quad = new VertexArray();
         quad.data(FRAMEBUFFER_QUAD_VERTICES, 8*Float.BYTES, FRAMEBUFFER_QUAD_INDICES);
         quad.attribute(0, 3, GL_FLOAT, false, 0);
         quad.attribute(1, 3, GL_FLOAT, false, 3 * Float.BYTES);
         quad.attribute(2, 2, GL_FLOAT, false, 6 * Float.BYTES);
 
         framebuffer = new GPUFramebuffer(width, height, (fb, w, h) -> {
-            gbufferPositionTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
-            gbufferPositionTexture.storage(1, GL_RGBA16F, w, h);
-            glTextureParameteri(gbufferPositionTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gbufferPositionTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferPositionTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferPositionTexture.storage(1, GL_RGBA16F, w, h);
+            glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-            gbufferNormalTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
-            gbufferNormalTexture.storage(1, GL_RGBA16F, w, h);
-            glTextureParameteri(gbufferNormalTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gbufferNormalTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferNormalTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferNormalTexture.storage(1, GL_RGBA16F, w, h);
+            glTextureParameteri(gBufferNormalTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(gBufferNormalTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-            gbufferColorTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
-            gbufferColorTexture.storage(1, GL_RGBA8, w, h);
-            glTextureParameteri(gbufferColorTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gbufferColorTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferColorTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferColorTexture.storage(1, GL_RGBA8, w, h);
+            glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-            fb.texture(gbufferPositionTexture, GL_COLOR_ATTACHMENT0, 0);
-            fb.texture(gbufferNormalTexture, GL_COLOR_ATTACHMENT1, 0);
-            fb.texture(gbufferColorTexture, GL_COLOR_ATTACHMENT2, 0);
+            fb.texture(gBufferPositionTexture, GL_COLOR_ATTACHMENT0, 0);
+            fb.texture(gBufferNormalTexture, GL_COLOR_ATTACHMENT1, 0);
+            fb.texture(gBufferColorTexture, GL_COLOR_ATTACHMENT2, 0);
 
             fb.renderbuffer(GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT, w, h);
 
@@ -153,19 +201,37 @@ public class Game {
         testModel.load("suzanne.obj");
 
         modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
+        model1UniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
         pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
 
-        sphereModel = new ModelUniformData();
-        sphereModel.model.identity();
-        modelUniformBuffer.allocate(sphereModel);
-        modelUniformBuffer.store(sphereModel);
+        model = new ModelUniformData();
+        model.model.identity();
+        modelUniformBuffer.allocate(model);
+
+        model1 = new ModelUniformData();
+        model1.model.identity();
+        model1UniformBuffer.allocate(model1);
 
         PBRUniformData pbr = new PBRUniformData();
         pbr.ambient = new Vector4f(ColorUtil.getRGBFromK(5900), 0.3f);
         pbr.lightColor = new Vector4f(ColorUtil.getRGBFromK(5900), 5f);
+        pbr.lightCount = 2;
         pbr.lightDirection = new Vector3f(0f, 0.829f, -0.559f);
         pbrUniformBuffer.allocate(pbr);
-        pbrUniformBuffer.store(pbr);
+
+        LightArray lightArray = new LightArray();
+        lightArray.lights.add(new Light(
+                new Vector3f(-3f, 3f, -3f),
+                new Vector3f(100.0f, 0.0f, 0.0f),
+                1.0f, 0.7f, 1.8f
+        ));
+        lightArray.lights.add(new Light(
+                new Vector3f(-3f, 3f, 3f),
+                new Vector3f(0.0f, 0.0f, 100.0f),
+                1.0f, 0.7f, 1.8f
+        ));
+        lightSSBO = new ShaderStorageBuffer(GPUBuffer.UpdateHint.DYNAMIC);
+        lightSSBO.allocate(lightArray);
 
         camera = new Camera(
                 new Vector3f(4.0f, 4.0f, 4.0f),
@@ -177,7 +243,7 @@ public class Game {
                 1000f
         );
 
-        sphereTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
+        modelTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
@@ -230,6 +296,8 @@ public class Game {
             framerate = 1 / delta;
         }
 
+        float speed = inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) ? defaultSpeed * 10f : defaultSpeed;
+
         Vector3f camPos = camera.position();
         Vector3f targetPos = camera.target();
         Vector3f forward = camera.forward().mul((float)delta * speed);
@@ -263,8 +331,23 @@ public class Game {
             camera.reconfigureView();
         }
 
-        sphereModel.model.rotateY((float)delta);
-        modelUniformBuffer.store(sphereModel);
+        model.model.rotateY((float)delta);
+        modelUniformBuffer.store(model);
+
+        model1.model.identity().translate(0, (float) Math.sin(GLFW.glfwGetTime()), 0);
+        model1UniformBuffer.store(model1);
+    }
+
+    private void renderGBufferPass(double delta) {
+        camera.bind(0);
+        modelUniformBuffer.bind(1);
+        gBuffer.use();
+        glBindTextureUnit(0, modelTexture.handle());
+        testModel.draw(gBuffer);
+    }
+
+    private void renderForwardPass(double delta) {
+
     }
 
     private void render(double delta) {
@@ -279,13 +362,7 @@ public class Game {
         glEnable(GL_DEPTH_TEST);
 
         // draw to framebuffer
-        camera.bind(0);
-        modelUniformBuffer.bind(1);
-//        pbrUniformBuffer.bind(2);
-//        pbr.use();
-        gbuffer.use();
-        glBindTextureUnit(0, sphereTexture.handle());
-        testModel.draw(gbuffer);
+        renderGBufferPass(delta);
 
         glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
@@ -293,11 +370,21 @@ public class Game {
         framebuffer.unbind();
         camera.bind(0);
         pbrUniformBuffer.bind(1);
-        gbufferBlit.use();
-        glBindTextureUnit(0, gbufferPositionTexture.handle());
-        glBindTextureUnit(1, gbufferNormalTexture.handle());
-        glBindTextureUnit(2, gbufferColorTexture.handle());
+        lightSSBO.bind(2);
+        gBufferBlit.use();
+        glBindTextureUnit(0, gBufferPositionTexture.handle());
+        glBindTextureUnit(1, gBufferNormalTexture.handle());
+        glBindTextureUnit(2, gBufferColorTexture.handle());
         quad.draw();
+        framebuffer.copyDepthToBackBuffer(width, height);
+
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+
+        renderForwardPass(delta);
+
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_DEPTH_TEST);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

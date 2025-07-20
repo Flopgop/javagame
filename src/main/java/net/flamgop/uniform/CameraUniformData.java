@@ -1,12 +1,12 @@
 package net.flamgop.uniform;
 
-import net.flamgop.gpu.UniformSerializable;
+import net.flamgop.gpu.buffer.BufferSerializable;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.nio.ByteBuffer;
 
-public class CameraUniformData implements UniformSerializable {
+public class CameraUniformData implements BufferSerializable {
     public Matrix4f view = new Matrix4f();
     public Matrix4f projection = new Matrix4f();
     public Vector3f position = new Vector3f();

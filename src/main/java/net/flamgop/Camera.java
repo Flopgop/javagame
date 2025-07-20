@@ -1,8 +1,7 @@
 package net.flamgop;
 
-import net.flamgop.gpu.GPUBuffer;
-import net.flamgop.gpu.UniformBuffer;
-import net.flamgop.input.InputState;
+import net.flamgop.gpu.buffer.GPUBuffer;
+import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.uniform.CameraUniformData;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;

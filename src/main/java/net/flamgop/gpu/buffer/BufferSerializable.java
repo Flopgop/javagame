@@ -1,8 +1,8 @@
-package net.flamgop.gpu;
+package net.flamgop.gpu.buffer;
 
 import java.nio.ByteBuffer;
 
-public interface UniformSerializable {
+public interface BufferSerializable {
     void encode(ByteBuffer buf);
     int length();
 }

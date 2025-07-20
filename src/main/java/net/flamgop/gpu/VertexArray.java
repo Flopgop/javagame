@@ -1,5 +1,6 @@
 package net.flamgop.gpu;
 
+import net.flamgop.gpu.buffer.GPUBuffer;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.par.ParShapes;
@@ -10,7 +11,7 @@ import java.nio.IntBuffer;
 
 import static org.lwjgl.opengl.GL46.*;
 
-public class VertexBuffer {
+public class VertexArray {
 
     private final int vao;
     private final GPUBuffer[] buffers;
@@ -18,7 +19,7 @@ public class VertexBuffer {
     private GPUBuffer elementBuffer;
     private int indexCount = 0;
 
-    public static VertexBuffer fromParShapesMesh(@NotNull ParShapesMesh mesh) {
+    public static VertexArray fromParShapesMesh(@NotNull ParShapesMesh mesh) {
         ParShapes.par_shapes_compute_normals(mesh);
 
         FloatBuffer points = mesh.points(mesh.npoints() * 3);
@@ -79,8 +80,8 @@ public class VertexBuffer {
         return withDefaultVertexFormat(vertData, indexData);
     }
 
-    public static VertexBuffer withDefaultVertexFormat(float[] vertexData, int[] indexData) {
-        VertexBuffer buffer = new VertexBuffer();
+    public static VertexArray withDefaultVertexFormat(float[] vertexData, int[] indexData) {
+        VertexArray buffer = new VertexArray();
         buffer.data(vertexData, 8 * Float.BYTES, indexData);
         buffer.attribute(0, 3, GL_FLOAT, false, 0);
         buffer.attribute(1, 3, GL_FLOAT, false, 3 * Float.BYTES);
@@ -88,7 +89,7 @@ public class VertexBuffer {
         return buffer;
     }
 
-    public VertexBuffer() {
+    public VertexArray() {
         this.vao = glCreateVertexArrays();
         this.buffers = new GPUBuffer[glGetInteger(GL_MAX_VERTEX_ATTRIBS)];
     }

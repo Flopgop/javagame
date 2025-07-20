@@ -8,8 +8,9 @@ import java.util.List;
 
 public class Model {
 
-    private final List<VertexBuffer> meshes = new ArrayList<>();
+    private final List<VertexArray> meshes = new ArrayList<>();
 
+    @SuppressWarnings("DataFlowIssue")
     public void load(String path) {
         AIScene scene = Assimp.aiImportFile(path, Assimp.aiProcess_Triangulate | Assimp.aiProcess_FlipUVs);
         if (scene == null || (scene.mFlags() & Assimp.AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene.mRootNode() == null) {
@@ -28,7 +29,7 @@ public class Model {
         }
     }
 
-    private VertexBuffer processMesh(AIMesh mesh, AIScene scene) {
+    private VertexArray processMesh(AIMesh mesh, AIScene scene) {
         List<Float> vertices = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
         List<GPUTexture> textures = new ArrayList<>();
@@ -63,12 +64,12 @@ public class Model {
             AIMaterial material = AIMaterial.create(scene.mMaterials().get(mesh.mMaterialIndex()));
             System.out.println(material);
         }
-        return VertexBuffer.withDefaultVertexFormat(Util.doubleToFloatArray(vertices.stream().mapToDouble(f -> f).toArray()), indices.stream().mapToInt(i -> i).toArray());
+        return VertexArray.withDefaultVertexFormat(Util.doubleToFloatArray(vertices.stream().mapToDouble(f -> f).toArray()), indices.stream().mapToInt(i -> i).toArray());
     }
 
     public void draw(ShaderProgram shader) {
         shader.use();
-        for (VertexBuffer buffer : meshes) {
+        for (VertexArray buffer : meshes) {
             buffer.draw();
         }
     }

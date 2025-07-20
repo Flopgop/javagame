@@ -37,6 +37,13 @@ public class GPUFramebuffer {
         this.init(width, height);
     }
 
+    public void copyDepthToBackBuffer(int width, int height) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, handle);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
     private void init(int width, int height) {
         initCallback.init(this, width, height);
         checkCompleteness();
@@ -44,6 +51,10 @@ public class GPUFramebuffer {
 
     public void drawBuffers(int[] attachments) {
         glNamedFramebufferDrawBuffers(this.handle, attachments);
+    }
+
+    public int handle() {
+        return handle;
     }
 
     /**

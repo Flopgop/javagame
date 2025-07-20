@@ -1,27 +1,22 @@
 package net.flamgop.text;
 
 import net.flamgop.ResourceHelper;
-import net.flamgop.gpu.GPUBuffer;
+import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.ShaderProgram;
-import net.flamgop.gpu.VertexBuffer;
+import net.flamgop.gpu.VertexArray;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.FloatBuffer;
 
-import static org.lwjgl.opengl.GL20.*;
-import static org.lwjgl.opengl.GL20.glGetUniformLocation;
-import static org.lwjgl.opengl.GL20.glUniformMatrix4fv;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
-import static org.lwjgl.opengl.GL31.glDrawElementsInstanced;
-import static org.lwjgl.opengl.GL45.glBindTextureUnit;
+import static org.lwjgl.opengl.GL46.*;
 
 public class TextRenderer {
 
     private static final int FLOATS_PER_INSTANCE = 8;
 
-    private final VertexBuffer unitQuad;
+    private final VertexArray unitQuad;
     private final ShaderProgram textShader;
     private final int textColorUniformLocation;
     private final int textProjectionUniformLocation;
@@ -38,11 +33,10 @@ public class TextRenderer {
         textColorUniformLocation = glGetUniformLocation(textShader.handle(), "text_color");
         textProjectionUniformLocation = glGetUniformLocation(textShader.handle(), "projection");
 
-        textShader.use();
         projection.ortho(0, width, 0, height, 0f, 1f);
-        glUniformMatrix4fv(textProjectionUniformLocation, false, projection.get(new float[16]));
+        glProgramUniformMatrix4fv(textShader.handle(), textProjectionUniformLocation, false, projection.get(new float[16]));
 
-        unitQuad = new VertexBuffer();
+        unitQuad = new VertexArray();
         unitQuad.data(new float[]{
                 0, 1, 0, 0,
                 0, 0, 0, 1,

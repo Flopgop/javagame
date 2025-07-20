@@ -1,11 +1,11 @@
 package net.flamgop.uniform;
 
-import net.flamgop.gpu.UniformSerializable;
+import net.flamgop.gpu.buffer.BufferSerializable;
 import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;
 
-public class ModelUniformData implements UniformSerializable {
+public class ModelUniformData implements BufferSerializable {
     public Matrix4f model = new Matrix4f();
 
     @Override

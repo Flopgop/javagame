@@ -1,4 +1,4 @@
-package net.flamgop.gpu;
+package net.flamgop.gpu.buffer;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
