@@ -3,15 +3,16 @@ package net.flamgop;
 import net.flamgop.gpu.*;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
-import net.flamgop.uniform.CameraUniformData;
 import net.flamgop.uniform.ModelUniformData;
 import net.flamgop.uniform.PBRUniformData;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.system.MemoryStack;
 
 import java.io.File;
+import java.nio.IntBuffer;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -36,7 +37,6 @@ public class Game {
     private final ShaderProgram pbr;
     private final UniformBuffer pbrUniformBuffer;
     private final UniformBuffer modelUniformBuffer;
-    private final UniformBuffer cameraUniformBuffer;
     private final GPUTexture sphereTexture;
     private final ModelUniformData sphereModel;
 
@@ -47,15 +47,26 @@ public class Game {
 
     private double frameTime = 1.0f;
 
+    private static final double FRAMERATE_UPDATE_RATE = 1f;
+    private double framerate = 1 / frameTime;
+    private double framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
+
+    private final Camera camera;
+
+    private int width, height;
+
     public Game() {
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
+
+        this.width = 1280;
+        this.height = 720;
 
         GLFW.glfwDefaultWindowHints();
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4);
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 6);
         GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE);
         GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
-        this.window = GLFW.glfwCreateWindow(1280, 720, "game", 0L, 0L);
+        this.window = GLFW.glfwCreateWindow(width, height, "game", 0L, 0L);
 
         GLFW.glfwMakeContextCurrent(this.window);
         GL.createCapabilities();
@@ -70,19 +81,18 @@ public class Game {
         pbr.attachShaderSource(ResourceHelper.loadFileContentsFromResource("shader.fragment.glsl"), GL_FRAGMENT_SHADER);
         pbr.link();
 
-        textRenderer = new TextRenderer();
+        textRenderer = new TextRenderer(width, height);
 
         quad = new VertexBuffer();
         quad.data(FRAMEBUFFER_QUAD_VERTICES, 8*Float.BYTES, FRAMEBUFFER_QUAD_INDICES);
         quad.attribute(0, 3, GL_FLOAT, false, 0);
         quad.attribute(1, 3, GL_FLOAT, false, 3 * Float.BYTES);
         quad.attribute(2, 2, GL_FLOAT, false, 6 * Float.BYTES);
-        framebuffer = new GPUFramebuffer(1280, 720);
+        framebuffer = new GPUFramebuffer(width, height);
 
         testModel = new Model();
         testModel.load("suzanne.obj");
 
-        cameraUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.DYNAMIC);
         modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
         pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
 
@@ -98,12 +108,15 @@ public class Game {
         pbrUniformBuffer.allocate(pbr);
         pbrUniformBuffer.store(pbr);
 
-        CameraUniformData camera = new CameraUniformData();
-        camera.position = new Vector3f(4.0f, 4.0f, 4.0f);
-        camera.view.lookAt(camera.position, new Vector3f(0,0,0), new Vector3f(0,1,0));
-        camera.projection.perspective((float)Math.toRadians(60f), 16f / 9f, 0.01f, 1000f);
-        cameraUniformBuffer.allocate(camera);
-        cameraUniformBuffer.store(camera);
+        camera = new Camera(
+                new Vector3f(4.0f, 4.0f, 4.0f),
+                new Vector3f(0.0f),
+                new Vector3f(0f, 1f, 0f),
+                (float) Math.toRadians(60f),
+                (float) width / height,
+                0.01f,
+                1000f
+        );
 
         sphereTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
 
@@ -130,8 +143,33 @@ public class Game {
         return GLFW.glfwWindowShouldClose(this.window);
     }
 
+    private void resize(int width, int height) {
+        this.width = width;
+        this.height = height;
+        this.camera.resize(width, height);
+        this.framebuffer.resize(width, height);
+        this.textRenderer.resize(width, height);
+    }
+
     private void update(double delta) {
         GLFW.glfwPollEvents();
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer pWidth = stack.callocInt(1);
+            IntBuffer pHeight = stack.callocInt(1);
+            GLFW.glfwGetWindowSize(window, pWidth, pHeight);
+            int width = pWidth.get(0);
+            int height = pHeight.get(0);
+            if (width != this.width || height != this.height) {
+                resize(width, height);
+            }
+        }
+
+        framerateUpdateCounter -= delta;
+        if (framerateUpdateCounter < 0) {
+            framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
+            framerate = 1 / delta;
+        }
 
         sphereModel.model.rotateY((float)delta);
         modelUniformBuffer.store(sphereModel);
@@ -149,7 +187,7 @@ public class Game {
         glEnable(GL_DEPTH_TEST);
 
         // draw to framebuffer
-        cameraUniformBuffer.bind(0);
+        camera.bind(0);
         modelUniformBuffer.bind(1);
         pbrUniformBuffer.bind(2);
         pbr.use();
@@ -166,7 +204,7 @@ public class Game {
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        textRenderer.drawText(font, String.format("FPS: %.2f", 1.0 / delta), 5f, 720f - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
+        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.height - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
         glDisable(GL_BLEND);
     }
 

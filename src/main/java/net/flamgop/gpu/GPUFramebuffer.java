@@ -5,11 +5,15 @@ import static org.lwjgl.opengl.GL46.*;
 public class GPUFramebuffer {
 
     private final int handle;
-    private final int renderbuffer;
-    private final GPUTexture texture;
+    private int renderbuffer;
+    private GPUTexture texture;
 
     public GPUFramebuffer(int width, int height) {
         this.handle = glCreateFramebuffers();
+        init(width, height);
+    }
+
+    private void init(int width, int height) {
         this.renderbuffer = glCreateRenderbuffers();
         this.texture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
         this.texture.storage(1, GL_RGBA32F, width, height);
@@ -26,6 +30,13 @@ public class GPUFramebuffer {
         if (status != GL_FRAMEBUFFER_COMPLETE) {
             throw new IllegalStateException("Framebuffer is incomplete: " + status);
         }
+    }
+
+    public void resize(int width, int height) {
+        this.texture.destroy();
+        glDeleteRenderbuffers(this.renderbuffer);
+        init(width, height);
+        glViewport(0,0,width,height);
     }
 
     public void bind() {

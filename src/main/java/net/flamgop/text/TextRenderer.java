@@ -24,22 +24,23 @@ public class TextRenderer {
     private final VertexBuffer unitQuad;
     private final ShaderProgram textShader;
     private final int textColorUniformLocation;
+    private final int textProjectionUniformLocation;
 
     private final GPUBuffer textUVBuffer;
+    private final Matrix4f projection = new Matrix4f();
 
-    public TextRenderer() {
+    public TextRenderer(int width, int height) {
         textShader = new ShaderProgram();
         textShader.attachShaderSource(ResourceHelper.loadFileContentsFromResource("text.vertex.glsl"), GL_VERTEX_SHADER);
         textShader.attachShaderSource(ResourceHelper.loadFileContentsFromResource("text.fragment.glsl"), GL_FRAGMENT_SHADER);
         textShader.link();
 
         textColorUniformLocation = glGetUniformLocation(textShader.handle(), "text_color");
-        final int textProjectionUniformLocation = glGetUniformLocation(textShader.handle(), "projection");
+        textProjectionUniformLocation = glGetUniformLocation(textShader.handle(), "projection");
 
         textShader.use();
-        Matrix4f orthogonal = new Matrix4f();
-        orthogonal.ortho(0, 1280, 0, 720, 0f, 1f);
-        glUniformMatrix4fv(textProjectionUniformLocation, false, orthogonal.get(new float[16]));
+        projection.ortho(0, width, 0, height, 0f, 1f);
+        glUniformMatrix4fv(textProjectionUniformLocation, false, projection.get(new float[16]));
 
         unitQuad = new VertexBuffer();
         unitQuad.data(new float[]{
@@ -60,6 +61,12 @@ public class TextRenderer {
         unitQuad.attribute(2, 4, GL_FLOAT, false, 0, 1, 1);
         unitQuad.attribute(3, 2, GL_FLOAT, false, 4 * Float.BYTES, 1, 1);
         unitQuad.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
+    }
+
+    public void resize(int width, int height) {
+        textShader.use();
+        projection.identity().ortho(0, width, 0, height, 0f, 1f);
+        glUniformMatrix4fv(textProjectionUniformLocation, false, projection.get(new float[16]));
     }
 
     private float addCharacterToBuffer(Font font, char c, float x, float y, float scale, FloatBuffer buffer) {
