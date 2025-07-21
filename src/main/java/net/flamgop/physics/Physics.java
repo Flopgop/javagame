@@ -68,7 +68,7 @@ public class Physics {
 
     public PhysicsScene createScene(PxSceneDesc sceneDesc) {
         PxScene pXscene = this.physics.createScene(sceneDesc);
-        PhysicsScene scene = new PhysicsScene(pXscene, 1.0 / 90.0, 20);
+        PhysicsScene scene = new PhysicsScene(pXscene);
         sceneDesc.destroy();
         return scene;
     }
