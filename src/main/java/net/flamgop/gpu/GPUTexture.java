@@ -1,7 +1,10 @@
 package net.flamgop.gpu;
 
+import org.lwjgl.assimp.AITexel;
+import org.lwjgl.assimp.AITexture;
 import org.lwjgl.stb.STBImage;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -47,6 +50,51 @@ public class GPUTexture {
             glTextureParameteri(texture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             return texture;
         }
+    }
+
+    public static GPUTexture loadFromRawBytes(ByteBuffer data, int color, int format, int type, int width, int height) {
+        GPUTexture texture = new GPUTexture(TextureTarget.TEXTURE_2D);
+        texture.storage(1, color, width, height);
+        glTextureSubImage2D(texture.handle(), 0, 0, 0, width, height, format, type, data);
+        glTextureParameteri(texture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(texture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        return texture;
+    }
+
+    public static GPUTexture loadFromAssimpTexture(AITexture texture) {
+        if (texture.mHeight() != 0) {
+            AITexel.Buffer buffer = texture.pcData();
+            ByteBuffer data = MemoryUtil.memAlloc(texture.mWidth() * texture.mHeight() * 4);
+            for (AITexel texel : buffer) {
+                data.put(texel.r());
+                data.put(texel.g());
+                data.put(texel.b());
+                data.put(texel.a());
+            }
+            data.flip();
+            GPUTexture tex = loadFromRawBytes(data, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, texture.mWidth(), texture.mHeight());
+            MemoryUtil.memFree(data);
+            return tex;
+        } else {
+            return loadFromBytes(texture.pcDataCompressed());
+        }
+    }
+
+    public static GPUTexture MISSING_TEXTURE;
+
+    public static void loadMissingTexture() {
+        MISSING_TEXTURE = new GPUTexture(TextureTarget.TEXTURE_2D);
+        MISSING_TEXTURE.storage(1, GL_RGBA8, 2, 2);
+        ByteBuffer buffer = MemoryUtil.memAlloc(Integer.BYTES*2*2);
+        buffer.putInt(0x000000FF);
+        buffer.putInt(0xFF00FFFF);
+        buffer.putInt(0xFF00FFFF);
+        buffer.putInt(0x000000FF);
+        glTextureSubImage2D(MISSING_TEXTURE.handle(), 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+        glTextureParameteri(MISSING_TEXTURE.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(MISSING_TEXTURE.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(MISSING_TEXTURE.handle, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTextureParameteri(MISSING_TEXTURE.handle, GL_TEXTURE_WRAP_T, GL_REPEAT);
     }
 
     private final int handle;

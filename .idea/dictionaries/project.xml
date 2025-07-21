@@ -2,8 +2,10 @@
   <dictionary name="project">
     <words>
       <w>gbuffer</w>
+      <w>joml</w>
       <w>mousebind</w>
       <w>mousebinds</w>
+      <w>quaternionf</w>
       <w>renderbuffers</w>
       <w>renderdoc</w>
     </words>

@@ -67,4 +67,6 @@ dependencies {
     runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-linux")
     runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos")
     runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos-arm64")
+
+    implementation("de.marhali:json5-java:2.0.0")
 }

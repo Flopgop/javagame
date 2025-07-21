@@ -1,19 +1,18 @@
 package net.flamgop;
 
+import net.flamgop.asset.AssetLoader;
 import net.flamgop.gpu.*;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
-import net.flamgop.gpu.uniform.Light;
-import net.flamgop.gpu.uniform.LightArray;
+import net.flamgop.gpu.model.Material;
 import net.flamgop.input.InputSequenceHandler;
 import net.flamgop.input.InputState;
-import net.flamgop.physics.CollisionFlags;
+import net.flamgop.level.Level;
+import net.flamgop.level.LevelLoader;
 import net.flamgop.physics.Physics;
-import net.flamgop.physics.RenderablePhysicsObject;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
-import net.flamgop.gpu.uniform.ModelUniformData;
 import net.flamgop.gpu.uniform.PBRUniformData;
 import net.flamgop.util.ColorUtil;
 import net.flamgop.util.ResourceHelper;
@@ -23,20 +22,15 @@ import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
-import physx.common.PxIDENTITYEnum;
-import physx.common.PxTransform;
-import physx.common.PxVec3;
-import physx.geometry.PxBoxGeometry;
-import physx.physics.*;
 
 import java.io.File;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.lwjgl.opengl.GL46.*;
 
 public class Game {
+
+    public static Game INSTANCE;
 
     private static String getSourceString(int source) {
         return switch (source) {
@@ -90,7 +84,6 @@ public class Game {
     private final VertexArray quad;
     private final GPUFramebuffer framebuffer;
 
-    private final ShaderProgram gBuffer;
     private final ShaderProgram gBufferBlit;
     private GPUTexture gBufferPositionTexture;
     private GPUTexture gBufferNormalTexture;
@@ -98,11 +91,6 @@ public class Game {
 
     private final ShaderStorageBuffer lightSSBO;
     private final UniformBuffer pbrUniformBuffer;
-    private final UniformBuffer modelUniformBuffer;
-    private final GPUTexture modelTexture;
-    private final ModelUniformData model;
-
-    private final Model testModel;
 
     private final TextRenderer textRenderer;
     private final Font font;
@@ -119,16 +107,33 @@ public class Game {
 
     @SuppressWarnings("FieldCanBeLocal")
     private final Physics physics;
-    private final PxVec3 tmpVec = new PxVec3(0.0f, -9.81f, 0.0f);
 
-    private final VertexArray cubeMesh;
+//    private final VertexArray cubeMesh;
 
-    private final List<RenderablePhysicsObject> objects = new ArrayList<>();
     private final Player player;
+
+    private final Level level;
 
     private int width, height;
 
+    public TextRenderer textRenderer() {
+        return textRenderer;
+    }
+
+    public Font font() {
+        return font;
+    }
+
+    public int width() {
+        return width;
+    }
+
+    public int height() {
+        return height;
+    }
+
     public Game() {
+        INSTANCE = this;
         physics = new Physics(4);
 
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
@@ -177,10 +182,14 @@ public class Game {
             System.out.println();
         }, 0L);
 
-        gBuffer = new ShaderProgram();
-        gBuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.vertex.glsl"), GL_VERTEX_SHADER);
-        gBuffer.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer.fragment.glsl"), GL_FRAGMENT_SHADER);
-        gBuffer.link();
+        GPUTexture.loadMissingTexture();
+        DefaultShaders.loadDefaultShaders();
+        Material.loadMissingMaterial();
+
+        AssetLoader assetLoader = new AssetLoader("./assets/");
+
+        LevelLoader loader = new LevelLoader(assetLoader);
+        this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
 
         gBufferBlit = new ShaderProgram();
         gBufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.vertex.glsl"), GL_VERTEX_SHADER);
@@ -192,44 +201,6 @@ public class Game {
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
         
         textRenderer = new TextRenderer(width, height);
-
-        PxMaterial material = physics.physics().createMaterial(1.0f, 0.7f, 0f);
-        PxShapeFlags shapeFlags = new PxShapeFlags((byte) (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value));
-
-        PxTransform tmpPose = new PxTransform(PxIDENTITYEnum.PxIdentity);
-        PxFilterData tmpFilterData = new PxFilterData(CollisionFlags.WORLD.flag(), CollisionFlags.WORLD.flag() | CollisionFlags.PLAYER.flag(), 0, 0);
-
-        PxBoxGeometry groundGeometry = new PxBoxGeometry(10f, 0.5f, 10f);
-        PxShape groundShape = physics.physics().createShape(groundGeometry, material, true, shapeFlags);
-        PxRigidStatic ground = physics.physics().createRigidStatic(tmpPose);
-        groundShape.setSimulationFilterData(tmpFilterData);
-        ground.attachShape(groundShape);
-        physics.scene().addActor(ground);
-
-        tmpVec.setX(0f); tmpVec.setY(15f); tmpVec.setZ(0f);
-        tmpPose.setP(tmpVec);
-        PxBoxGeometry boxGeometry = new PxBoxGeometry(0.5f, 0.5f, 0.5f);   // PxBoxGeometry uses half-sizes
-        PxShape boxShape = physics.physics().createShape(boxGeometry, material, true, shapeFlags);
-        PxRigidDynamic box = physics.physics().createRigidDynamic(tmpPose);
-        boxShape.setSimulationFilterData(tmpFilterData);
-        box.attachShape(boxShape);
-        box.setMass(50);
-        physics.scene().addActor(box);
-
-        groundGeometry.destroy();
-        boxGeometry.destroy();
-        tmpFilterData.destroy();
-        tmpPose.destroy();
-        shapeFlags.destroy();
-
-        Model model1 = new Model();
-        model1.load("cube.obj");
-        cubeMesh = model1.meshes.getFirst();
-        objects.add(new RenderablePhysicsObject(box, cubeMesh));
-
-        model1 = new Model();
-        model1.load("ground.obj");
-        objects.add(new RenderablePhysicsObject(ground, model1.meshes.getFirst()));
 
         quad = new VertexArray();
         quad.data(FRAMEBUFFER_QUAD_VERTICES, 8*Float.BYTES, FRAMEBUFFER_QUAD_INDICES);
@@ -262,15 +233,7 @@ public class Game {
             fb.drawBuffers(new int[]{GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2});
         });
 
-        testModel = new Model();
-        testModel.load("suzanne.obj");
-
-        modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
         pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
-
-        model = new ModelUniformData();
-        model.model.identity().translate(0, 5, 0);
-        modelUniformBuffer.allocate(model);
 
         PBRUniformData pbr = new PBRUniformData();
         pbr.ambient = new Vector4f(ColorUtil.getRGBFromK(5900), 0.3f);
@@ -279,19 +242,8 @@ public class Game {
         pbr.lightDirection = new Vector3f(0f, 0.829f, -0.559f);
         pbrUniformBuffer.allocate(pbr);
 
-        LightArray lightArray = new LightArray();
-        lightArray.lights.add(new Light(
-                new Vector3f(-3f, 3f, -3f),
-                new Vector3f(100.0f, 0.0f, 0.0f),
-                1.0f, 0.7f, 1.8f
-        ));
-        lightArray.lights.add(new Light(
-                new Vector3f(-3f, 3f, 3f),
-                new Vector3f(0.0f, 0.0f, 100.0f),
-                1.0f, 0.7f, 1.8f
-        ));
         lightSSBO = new ShaderStorageBuffer(GPUBuffer.UpdateHint.DYNAMIC);
-        lightSSBO.allocate(lightArray);
+        lightSSBO.allocate(level.lights());
 
         camera = new Camera(
                 new Vector3f(4.0f, 20.0f, 4.0f),
@@ -303,13 +255,13 @@ public class Game {
                 1000f
         );
 
-        modelTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
+//        modelTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
         font.writeAtlasToDisk(new File("font.png"));
 
-        this.player = new Player(physics, camera, inputState);
+        this.player = new Player(physics, level.scene(), camera, inputState);
         GLFW.glfwSetInputMode(window, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_DISABLED);
     }
 
@@ -359,55 +311,25 @@ public class Game {
             framerate = 1 / delta;
         }
 
-        if (inputState.wasKeyPressed(GLFW.GLFW_KEY_F)) {
-            PxMaterial material = physics.physics().createMaterial(1.0f, 0.7f, 0f);
-            PxShapeFlags shapeFlags = new PxShapeFlags((byte) (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value));
-
-            PxTransform tmpPose = new PxTransform(PxIDENTITYEnum.PxIdentity);
-            PxFilterData tmpFilterData = new PxFilterData(CollisionFlags.WORLD.flag(), CollisionFlags.WORLD.flag() | CollisionFlags.PLAYER.flag(), 0, 0);
-
-            tmpVec.setX(0f); tmpVec.setY(15f); tmpVec.setZ(0f);
-            tmpPose.setP(tmpVec);
-            PxBoxGeometry objGeometry = new PxBoxGeometry(0.5f, 0.5f, 0.5f);
-            PxShape objShape = physics.physics().createShape(objGeometry, material, true, shapeFlags);
-            PxRigidDynamic obj = physics.physics().createRigidDynamic(tmpPose);
-            objShape.setSimulationFilterData(tmpFilterData);
-            obj.attachShape(objShape);
-            obj.setMass(50);
-            physics.scene().addActor(obj);
-
-            objects.add(new RenderablePhysicsObject(obj, cubeMesh));
-
-            objGeometry.destroy();
-            tmpFilterData.destroy();
-            tmpPose.destroy();
-            shapeFlags.destroy();
-        }
-
-        model.model.rotateY((float)delta);
-        modelUniformBuffer.store(model);
-
-        physics.update(delta);
-
-        player.update(physics.fixedDeltaTime());
-
-        objects.forEach(RenderablePhysicsObject::update);
+        level.update(player, delta);
+        player.update(delta);
 
         inputState.update();
     }
 
     private void renderGBufferPass(double delta) {
         camera.bind(0);
-        modelUniformBuffer.bind(1);
-        gBuffer.use();
-        glBindTextureUnit(0, modelTexture.handle());
-        testModel.draw(gBuffer);
-
-        objects.forEach(RenderablePhysicsObject::render);
+        level.render(delta);
     }
 
     private void renderForwardPass(double delta) {
 
+    }
+
+    private void renderUi(double delta) {
+        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.height - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
+        textRenderer.drawText(font, inputSequenceHandler.getDebugSequence(), 5f, this.height - 3 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
+        player.renderDebug(textRenderer, delta);
     }
 
     private void render(double delta) {
@@ -448,8 +370,7 @@ public class Game {
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.height - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
-        textRenderer.drawText(font, inputSequenceHandler.getDebugSequence(), 5f, this.height - 3 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
+        renderUi(delta);
         glDisable(GL_BLEND);
     }
 

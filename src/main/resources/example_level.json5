@@ -1,0 +1,41 @@
+{
+  "static": [
+    {
+      "id": "ground",
+      "model": "resource:ground.glb",
+      "position": [0,0,0],
+      "rotation": [0,0,0,1],
+      "collision": "resource:ground.obj",
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    }
+  ],
+  "dynamic": [
+    {
+      "id": "cube",
+      "model": "resource:cube.glb",
+      "position": [0,15,0],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    }
+  ],
+  "lights": [
+    {
+      "position": [-3,3,-3],
+      "color": [100,0,0],
+      "constant": 1.0,
+      "linear": 0.7,
+      "quadratic": 1.8
+    },
+    {
+      "position": [-3,3,3],
+      "color": [0,0,100],
+      "constant": 1.0,
+      "linear": 0.7,
+      "quadratic": 1.8
+    }
+  ]
+}

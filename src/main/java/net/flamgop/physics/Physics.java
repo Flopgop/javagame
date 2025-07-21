@@ -1,10 +1,19 @@
 package net.flamgop.physics;
 
+import org.lwjgl.assimp.*;
+import org.lwjgl.system.MemoryStack;
 import physx.PxTopLevelFunctions;
 import physx.common.*;
+import physx.cooking.*;
+import physx.geometry.PxConvexMesh;
+import physx.geometry.PxTriangleMesh;
 import physx.physics.PxPhysics;
 import physx.physics.PxScene;
 import physx.physics.PxSceneDesc;
+import physx.support.PxArray_PxU32;
+import physx.support.PxArray_PxVec3;
+
+import java.nio.ByteBuffer;
 
 public class Physics {
 
@@ -15,15 +24,7 @@ public class Physics {
     private final PxTolerancesScale tolerances = new PxTolerancesScale();
     private final PxPhysics physics;
     private final PxDefaultCpuDispatcher cpuDispatcher;
-
-    private final PxScene scene;
-
-    private float gravity = 2*-9.81f;
-    private final PxVec3 tmpVec = new PxVec3(0.0f, gravity, 0.0f);
-
-    private double accumulator = 0;
-    private final double fixedDeltaTime = 1.0 / 60.0;
-    private final int maxSubstepsPerFrame = 20;
+    private final PxCookingParams cookingParams;
 
     public Physics(int threads) {
         int version = PxTopLevelFunctions.getPHYSICS_VERSION();
@@ -38,49 +39,7 @@ public class Physics {
 
         this.cpuDispatcher = PxTopLevelFunctions.DefaultCpuDispatcherCreate(threads);
 
-        PxSceneDesc sceneDesc = new PxSceneDesc(tolerances);
-        sceneDesc.setGravity(tmpVec);
-        sceneDesc.setCpuDispatcher(cpuDispatcher);
-        sceneDesc.setFilterShader(PxTopLevelFunctions.DefaultFilterShader());
-        this.scene = physics.createScene(sceneDesc);
-    }
-
-    public void update(double delta) {
-        accumulator += delta;
-
-        int steps = 0;
-        while (accumulator >= fixedDeltaTime && steps < maxSubstepsPerFrame) {
-            scene.simulate((float) fixedDeltaTime);
-            scene.fetchResults(true);
-
-            accumulator -= fixedDeltaTime;
-            steps++;
-        }
-
-        if (steps >= maxSubstepsPerFrame && accumulator >= fixedDeltaTime) {
-            System.err.printf("Physics running ~%.2f steps behind!\n", accumulator / fixedDeltaTime);
-            accumulator = 0.0;
-        }
-    }
-
-    public PxScene scene() {
-        return scene;
-    }
-
-    public double fixedDeltaTime() {
-        return fixedDeltaTime;
-    }
-
-    public float gravity() {
-        return gravity;
-    }
-
-    public void gravity(float gravity) {
-        this.gravity = gravity;
-        tmpVec.setX(0);
-        tmpVec.setY(gravity);
-        tmpVec.setZ(0);
-        scene.setGravity(tmpVec);
+        this.cookingParams = new PxCookingParams(tolerances);
     }
 
     public PxDefaultCpuDispatcher cpuDispatcher() {
@@ -99,10 +58,107 @@ public class Physics {
         return tolerances;
     }
 
-    public PxScene createScene(PxSceneDesc sceneDesc) {
-        PxScene scene = this.physics.createScene(sceneDesc);
+    public PxSceneDesc defaultSceneDesc(PxVec3 gravity) {
+        PxSceneDesc sceneDesc = new PxSceneDesc(tolerances());
+        sceneDesc.setGravity(gravity);
+        sceneDesc.setCpuDispatcher(cpuDispatcher());
+        sceneDesc.setFilterShader(PxTopLevelFunctions.DefaultFilterShader());
+        return sceneDesc;
+    }
+
+    public PhysicsScene createScene(PxSceneDesc sceneDesc) {
+        PxScene pXscene = this.physics.createScene(sceneDesc);
+        PhysicsScene scene = new PhysicsScene(pXscene, 1.0 / 90.0, 20);
         sceneDesc.destroy();
         return scene;
+    }
+
+    public PxTriangleMesh loadMesh(ByteBuffer bytes) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            AIScene scene = Assimp.aiImportFileFromMemory(bytes, Assimp.aiProcess_Triangulate | Assimp.aiProcess_JoinIdenticalVertices, (ByteBuffer) null);
+            if (scene == null || scene.mNumMeshes() == 0) throw new IllegalStateException("Failed to load mesh");
+            AIMesh aiMesh = AIMesh.create(scene.mMeshes().get(0));
+
+            PxArray_PxVec3 vertexBuffer = new PxArray_PxVec3();
+            PxArray_PxU32 indexBuffer = new PxArray_PxU32();
+
+            AIVector3D.Buffer vertices = aiMesh.mVertices();
+            for (int i = 0; i < aiMesh.mNumVertices(); i++) {
+                AIVector3D vertex = vertices.get(i);
+                vertexBuffer.pushBack(PxVec3.createAt(stack, MemoryStack::nmalloc, vertex.x(), vertex.y(), vertex.z()));
+            }
+
+            AIFace.Buffer faces = aiMesh.mFaces();
+            for (int i = 0; i < aiMesh.mNumFaces(); i++) {
+                AIFace face = faces.get(i);
+                for (int j = 0; j  < face.mNumIndices(); j++) {
+                    indexBuffer.pushBack(face.mIndices().get(j));
+                }
+            }
+
+            PxBoundedData points = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
+            points.setCount(vertexBuffer.size());
+            points.setStride(PxVec3.SIZEOF);
+            points.setData(vertexBuffer.begin());
+
+            PxBoundedData triangles = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
+            triangles.setCount(indexBuffer.size() / 3);
+            triangles.setStride(4 * 3);
+            triangles.setData(indexBuffer.begin());
+
+            PxTriangleMeshDesc meshDesc = new PxTriangleMeshDesc();
+            meshDesc.setPoints(points);
+            meshDesc.setTriangles(triangles);
+
+            PxTriangleMesh mesh = PxTopLevelFunctions.CreateTriangleMesh(cookingParams, meshDesc);
+
+            scene.free();
+            return mesh;
+        }
+    }
+
+    public PxConvexMesh loadConvexMesh(ByteBuffer bytes) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            AIScene scene = Assimp.aiImportFileFromMemory(bytes, Assimp.aiProcess_Triangulate | Assimp.aiProcess_JoinIdenticalVertices, (ByteBuffer) null);
+            if (scene == null || scene.mNumMeshes() == 0) throw new IllegalStateException("Failed to load mesh");
+            AIMesh aiMesh = AIMesh.create(scene.mMeshes().get(0));
+
+            PxArray_PxVec3 vertexBuffer = new PxArray_PxVec3();
+            PxArray_PxU32 indexBuffer = new PxArray_PxU32();
+
+            AIVector3D.Buffer vertices = aiMesh.mVertices();
+            for (int i = 0; i < aiMesh.mNumVertices(); i++) {
+                AIVector3D vertex = vertices.get(i);
+                vertexBuffer.pushBack(PxVec3.createAt(stack, MemoryStack::nmalloc, vertex.x(), vertex.y(), vertex.z()));
+            }
+
+            AIFace.Buffer faces = aiMesh.mFaces();
+            for (int i = 0; i < aiMesh.mNumFaces(); i++) {
+                AIFace face = faces.get(i);
+                for (int j = 0; j  < face.mNumIndices(); j++) {
+                    indexBuffer.pushBack(face.mIndices().get(j));
+                }
+            }
+
+            PxBoundedData points = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
+            points.setCount(vertexBuffer.size());
+            points.setStride(PxVec3.SIZEOF);
+            points.setData(vertexBuffer.begin());
+
+            PxBoundedData triangles = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
+            triangles.setCount(indexBuffer.size() / 3);
+            triangles.setStride(4 * 3);
+            triangles.setData(indexBuffer.begin());
+
+            PxConvexMeshDesc meshDesc = new PxConvexMeshDesc();
+            meshDesc.setPoints(points);
+            meshDesc.setFlags(new PxConvexFlags((short)(PxConvexFlagEnum.eCOMPUTE_CONVEX.value | PxConvexFlagEnum.eCHECK_ZERO_AREA_TRIANGLES.value | PxConvexFlagEnum.eQUANTIZE_INPUT.value)));
+
+            PxConvexMesh mesh = PxTopLevelFunctions.CreateConvexMesh(cookingParams, meshDesc);
+
+            scene.free();
+            return mesh;
+        }
     }
 
     public void destroy() {
