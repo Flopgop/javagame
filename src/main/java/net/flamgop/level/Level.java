@@ -1,6 +1,5 @@
 package net.flamgop.level;
 
-import net.flamgop.Player;
 import net.flamgop.asset.AssetLoader;
 import net.flamgop.gpu.uniform.Light;
 import net.flamgop.gpu.uniform.LightArray;
@@ -71,8 +70,7 @@ public class Level {
         return lightArray;
     }
 
-    public void update(Player player, double delta) {
-        scene.fixedUpdate(player, delta);
+    public void update(double delta) {
         for (DynamicEntity entity : dynamicEntities) {
 //            entity.update(delta);
             // specific behavior TBD

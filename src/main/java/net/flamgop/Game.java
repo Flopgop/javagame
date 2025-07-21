@@ -28,6 +28,7 @@ import java.nio.IntBuffer;
 
 import static org.lwjgl.opengl.GL46.*;
 
+@SuppressWarnings("FieldCanBeLocal")
 public class Game {
 
     public static Game INSTANCE;
@@ -105,16 +106,17 @@ public class Game {
     private final InputSequenceHandler inputSequenceHandler;
     private final InputState inputState;
 
-    @SuppressWarnings("FieldCanBeLocal")
     private final Physics physics;
-
-//    private final VertexArray cubeMesh;
 
     private final Player player;
 
     private final Level level;
 
     private int width, height;
+
+    private final double fixedDeltaTime = 1.0 / 90.0;
+    private final int maxSubstepsPerFrame = 20;
+    private double accumulator = 0;
 
     public TextRenderer textRenderer() {
         return textRenderer;
@@ -279,6 +281,24 @@ public class Game {
         this.cleanup();
     }
 
+    private void fixedUpdate(double delta) {
+        accumulator += delta;
+
+        int steps = 0;
+        while (accumulator >= fixedDeltaTime && steps < maxSubstepsPerFrame) {
+            level.scene().fixedUpdate((float) fixedDeltaTime);
+            player.fixedUpdate(fixedDeltaTime);
+
+            accumulator -= fixedDeltaTime;
+            steps++;
+        }
+
+        if (steps >= maxSubstepsPerFrame && accumulator >= fixedDeltaTime) {
+            System.err.printf("Physics running ~%.2f steps behind!\n", accumulator / fixedDeltaTime);
+            accumulator = 0.0;
+        }
+    }
+
     private boolean shouldClose() {
         return GLFW.glfwWindowShouldClose(this.window);
     }
@@ -311,7 +331,8 @@ public class Game {
             framerate = 1 / delta;
         }
 
-        level.update(player, delta);
+        fixedUpdate(delta);
+        level.update(delta);
         player.update(delta);
 
         inputState.update();

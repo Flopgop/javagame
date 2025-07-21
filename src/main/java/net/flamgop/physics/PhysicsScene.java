@@ -11,17 +11,11 @@ public class PhysicsScene {
     private final PxScene scene;
     private final PxControllerManager controllerManager;
 
-    private final double fixedDeltaTime;
-    private final int maxSubstepsPerFrame;
-    private double accumulator = 0;
-
     private float gravity = -9.81f;
     private final PxVec3 tmpVec = new PxVec3(0.0f, gravity, 0.0f);
 
-    public PhysicsScene(PxScene scene, double fixedDeltaTime, int maxSubstepsPerFrame) {
+    public PhysicsScene(PxScene scene) {
         this.scene = scene;
-        this.fixedDeltaTime = fixedDeltaTime;
-        this.maxSubstepsPerFrame = maxSubstepsPerFrame;
 
         this.controllerManager = PxTopLevelFunctions.CreateControllerManager(scene);
     }
@@ -38,10 +32,6 @@ public class PhysicsScene {
         scene.addActor(actor);
     }
 
-    public double fixedDeltaTime() {
-        return fixedDeltaTime;
-    }
-
     public float gravity() {
         return gravity;
     }
@@ -54,22 +44,8 @@ public class PhysicsScene {
         scene.setGravity(tmpVec);
     }
 
-    public void fixedUpdate(Player player, double delta) {
-        accumulator += delta;
-
-        int steps = 0;
-        while (accumulator >= fixedDeltaTime && steps < maxSubstepsPerFrame) {
-            scene.simulate((float) fixedDeltaTime);
-            scene.fetchResults(true);
-            player.fixedUpdate(player.scene().fixedDeltaTime());
-
-            accumulator -= fixedDeltaTime;
-            steps++;
-        }
-
-        if (steps >= maxSubstepsPerFrame && accumulator >= fixedDeltaTime) {
-            System.err.printf("Physics running ~%.2f steps behind!\n", accumulator / fixedDeltaTime);
-            accumulator = 0.0;
-        }
+    public void fixedUpdate(double delta) {
+        scene.simulate((float) delta);
+        scene.fetchResults(true);
     }
 }
