@@ -1,6 +1,6 @@
 package net.flamgop.text;
 
-import net.flamgop.ResourceHelper;
+import net.flamgop.util.ResourceHelper;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.ShaderProgram;
 import net.flamgop.gpu.VertexArray;

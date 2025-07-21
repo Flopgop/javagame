@@ -4,13 +4,17 @@ import org.joml.Vector2f;
 import org.lwjgl.glfw.GLFW;
 
 public class InputState {
-    private boolean[] keys = new boolean[GLFW.GLFW_KEY_LAST];
-    private boolean[] previousKeys = new boolean[GLFW.GLFW_KEY_LAST];
+    private final boolean[] keys = new boolean[GLFW.GLFW_KEY_LAST];
+    private final boolean[] previousKeys = new boolean[GLFW.GLFW_KEY_LAST];
+
+    private final boolean[] mouseButtons = new boolean[GLFW.GLFW_MOUSE_BUTTON_LAST];
+    private final boolean[] previousMouseButtons = new boolean[GLFW.GLFW_MOUSE_BUTTON_LAST];
 
     private double mouseX, mouseY, lastMouseX, lastMouseY, deltaMouseX, deltaMouseY;
 
     public void update() {
         System.arraycopy(keys, 0, previousKeys, 0, GLFW.GLFW_KEY_LAST);
+        System.arraycopy(mouseButtons, 0, previousMouseButtons, 0, GLFW.GLFW_MOUSE_BUTTON_LAST);
         deltaMouseX = mouseX - lastMouseX;
         deltaMouseY = mouseY - lastMouseY;
         lastMouseX = mouseX;
@@ -26,12 +30,24 @@ public class InputState {
         this.mouseY = mouseY;
     }
 
+    public void handleMouseButton(int button, int action) {
+        mouseButtons[button] = action == GLFW.GLFW_PRESS || action == GLFW.GLFW_REPEAT;
+    }
+
     public boolean isKeyDown(int key) {
         return keys[key];
     }
 
-    public boolean wasPressed(int key) {
+    public boolean wasKeyPressed(int key) {
         return keys[key] && !previousKeys[key];
+    }
+
+    public boolean isMouseButtonDown(int button) {
+        return mouseButtons[button];
+    }
+
+    public boolean wasMouseButtonPressed(int button) {
+        return mouseButtons[button] && !previousMouseButtons[button];
     }
 
     public Vector2f deltaMousePosition() {

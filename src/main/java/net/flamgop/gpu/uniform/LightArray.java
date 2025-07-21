@@ -1,4 +1,4 @@
-package net.flamgop;
+package net.flamgop.gpu.uniform;
 
 import net.flamgop.gpu.buffer.BufferSerializable;
 

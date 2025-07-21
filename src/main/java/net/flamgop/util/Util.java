@@ -1,4 +1,4 @@
-package net.flamgop;
+package net.flamgop.util;
 
 public class Util {
     public static float[] doubleToFloatArray(double[] d) {

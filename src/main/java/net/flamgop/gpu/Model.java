@@ -1,6 +1,6 @@
 package net.flamgop.gpu;
 
-import net.flamgop.Util;
+import net.flamgop.util.Util;
 import org.lwjgl.assimp.*;
 
 import java.util.ArrayList;

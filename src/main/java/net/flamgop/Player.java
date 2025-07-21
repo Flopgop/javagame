@@ -14,10 +14,12 @@ import physx.geometry.PxBoxGeometry;
 import physx.geometry.PxGeometry;
 import physx.physics.*;
 
+@SuppressWarnings("FieldCanBeLocal")
 public class Player {
 
     private final Camera camera;
     private final PxRigidDynamic actor;
+    private final Physics physics;
     private final PxScene scene;
     private final PxVec3 temp = new PxVec3();
     private final InputState inputState;
@@ -25,17 +27,19 @@ public class Player {
     private final PxBoxGeometry groundCheck = new PxBoxGeometry(0.5f, 0.01f, 0.5f);
     private final PxTransform groundCheckTransform = new PxTransform();
 
-    private final float defaultAcceleration = 0.5f;
-    private final float airAcceleration = 0.25f;
+    private final float defaultAcceleration = 1f;
+    private final float airAcceleration = 0.5f;
+    private final float jumpAcceleration = 4f;
     private final float sensitivity = 0.5f;
 
     private float yaw = 0.0f;
     private float pitch = 0.0f;
     private boolean onGround = false;
 
-    public Player(Physics physics, PxScene scene, Camera camera, InputState inputState) {
+    public Player(Physics physics, Camera camera, InputState inputState) {
         this.camera = camera;
-        this.scene = scene;
+        this.physics = physics;
+        this.scene = physics.scene();
         this.inputState = inputState;
 
         PxGeometry geometry = new PxBoxGeometry(0.25f, 1f, 0.25f);
@@ -69,14 +73,17 @@ public class Player {
         filterData.destroy();
     }
 
-    private void applyMotionDamping() {
+    private void applyMotionDamping(double delta) {
         PxVec3 pxVelocity = actor.getLinearVelocity();
         Vector3f velocity = new Vector3f(pxVelocity.getX(), pxVelocity.getY(), pxVelocity.getZ());
 
+        float dampingPerSecond = 5;
+        float decay = (float) Math.exp(-dampingPerSecond * delta);
+
         Vector3f dampingForce = new Vector3f(
-                -velocity.x * 50f,
+                -velocity.x * decay,
                 -velocity.y * 0f,
-                -velocity.z * 50f
+                -velocity.z * decay
         );
         temp.setX(dampingForce.x);
         temp.setY(dampingForce.y);
@@ -112,26 +119,26 @@ public class Player {
         Vector3f forward = camera.forward().mul(1,0,1).normalize();
         Vector3f right = camera.right();
 
-        Vector3f impulse = new Vector3f();
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_W)) impulse.add(forward);
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_S)) impulse.sub(forward);
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_D)) impulse.add(right);
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_A)) impulse.sub(right);
+        Vector3f acceleration = new Vector3f();
+        if (inputState.isKeyDown(GLFW.GLFW_KEY_W)) acceleration.add(forward);
+        if (inputState.isKeyDown(GLFW.GLFW_KEY_S)) acceleration.sub(forward);
+        if (inputState.isKeyDown(GLFW.GLFW_KEY_D)) acceleration.add(right);
+        if (inputState.isKeyDown(GLFW.GLFW_KEY_A)) acceleration.sub(right);
 
-        if (impulse.lengthSquared() > 0.01*0.01) {
-            impulse.normalize().mul(onGround ? defaultAcceleration : airAcceleration);
-            temp.setX(impulse.x);
-            temp.setY(impulse.y);
-            temp.setZ(impulse.z);
+        if (acceleration.lengthSquared() > 0.01*0.01) {
+            acceleration.normalize().mul(onGround ? defaultAcceleration : airAcceleration);
+            temp.setX(acceleration.x);
+            temp.setY(acceleration.y);
+            temp.setZ(acceleration.z);
+            actor.addForce(temp, PxForceModeEnum.eACCELERATION);
+        }
+
+        if (inputState.wasKeyPressed(GLFW.GLFW_KEY_SPACE) && onGround) {
+            temp.setX(0); temp.setY(jumpAcceleration * -physics.gravity()); temp.setZ(0);
             actor.addForce(temp, PxForceModeEnum.eIMPULSE);
         }
 
-        if (inputState.wasPressed(GLFW.GLFW_KEY_SPACE) && onGround) {
-            temp.setX(0); temp.setY(5f * 9.81f); temp.setZ(0);
-            actor.addForce(temp, PxForceModeEnum.eIMPULSE);
-        }
-
-        applyMotionDamping();
+        applyMotionDamping(delta);
 
         PxTransform transform = actor.getGlobalPose();
         PxVec3 pos = transform.getP();

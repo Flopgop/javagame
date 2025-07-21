@@ -1,4 +1,4 @@
-package net.flamgop;
+package net.flamgop.util;
 
 import org.lwjgl.system.MemoryUtil;
 
