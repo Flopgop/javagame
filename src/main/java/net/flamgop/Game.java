@@ -6,19 +6,30 @@ import net.flamgop.gpu.buffer.ShaderStorageBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.input.InputSequenceHandler;
 import net.flamgop.input.InputState;
+import net.flamgop.physics.CollisionFlags;
+import net.flamgop.physics.Physics;
+import net.flamgop.physics.RenderablePhysicsObject;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
-import net.flamgop.uniform.ModelUniformData;
-import net.flamgop.uniform.PBRUniformData;
+import net.flamgop.gpu.uniform.ModelUniformData;
+import net.flamgop.gpu.uniform.PBRUniformData;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
+import physx.PxTopLevelFunctions;
+import physx.common.PxIDENTITYEnum;
+import physx.common.PxTransform;
+import physx.common.PxVec3;
+import physx.geometry.PxBoxGeometry;
+import physx.physics.*;
 
 import java.io.File;
 import java.nio.IntBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -87,8 +98,6 @@ public class Game {
     private final UniformBuffer modelUniformBuffer;
     private final GPUTexture modelTexture;
     private final ModelUniformData model;
-    private final UniformBuffer model1UniformBuffer;
-    private final ModelUniformData model1;
 
 //    private final ShaderProgram unshadedForward;
 
@@ -108,10 +117,19 @@ public class Game {
     private final InputState inputState;
 
     @SuppressWarnings("FieldCanBeLocal")
-    private final float defaultSpeed = 2.0f;
+    private final Physics physics;
+    private final PxVec3 tmpVec = new PxVec3(0.0f, -9.81f, 0.0f);
+    private final PxScene scene;
+    private final VertexArray cubeMesh;
+
+    private final List<RenderablePhysicsObject> objects = new ArrayList<>();
+    private final Player player;
+
     private int width, height;
 
     public Game() {
+        physics = new Physics(4);
+
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
 
         this.width = 1280;
@@ -133,6 +151,10 @@ public class Game {
         GLFW.glfwSetKeyCallback(window, (_, key, _, action, mods) -> {
             inputSequenceHandler.handleKey(key, mods, action);
             inputState.handleKey(key, action);
+        });
+        //noinspection resource
+        GLFW.glfwSetCursorPosCallback(window, (_, x, y) -> {
+            inputState.handleMouse(x,y);
         });
 
         GLFW.glfwMakeContextCurrent(this.window);
@@ -165,6 +187,50 @@ public class Game {
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
         
         textRenderer = new TextRenderer(width, height);
+
+        PxSceneDesc sceneDesc = new PxSceneDesc(physics.tolerances());
+        sceneDesc.setGravity(tmpVec);
+        sceneDesc.setCpuDispatcher(physics.cpuDispatcher());
+        sceneDesc.setFilterShader(PxTopLevelFunctions.DefaultFilterShader());
+        this.scene = physics.createScene(sceneDesc);
+
+        PxMaterial material = physics.physics().createMaterial(1.0f, 0.7f, 0f);
+        PxShapeFlags shapeFlags = new PxShapeFlags((byte) (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value));
+
+        PxTransform tmpPose = new PxTransform(PxIDENTITYEnum.PxIdentity);
+        PxFilterData tmpFilterData = new PxFilterData(CollisionFlags.WORLD.flag(), CollisionFlags.WORLD.flag() | CollisionFlags.PLAYER.flag(), 0, 0);
+
+        PxBoxGeometry groundGeometry = new PxBoxGeometry(10f, 0.5f, 10f);
+        PxShape groundShape = physics.physics().createShape(groundGeometry, material, true, shapeFlags);
+        PxRigidStatic ground = physics.physics().createRigidStatic(tmpPose);
+        groundShape.setSimulationFilterData(tmpFilterData);
+        ground.attachShape(groundShape);
+        scene.addActor(ground);
+
+        tmpVec.setX(0f); tmpVec.setY(15f); tmpVec.setZ(0f);
+        tmpPose.setP(tmpVec);
+        PxBoxGeometry boxGeometry = new PxBoxGeometry(0.5f, 0.5f, 0.5f);   // PxBoxGeometry uses half-sizes
+        PxShape boxShape = physics.physics().createShape(boxGeometry, material, true, shapeFlags);
+        PxRigidDynamic box = physics.physics().createRigidDynamic(tmpPose);
+        boxShape.setSimulationFilterData(tmpFilterData);
+        box.attachShape(boxShape);
+        box.setMass(50);
+        scene.addActor(box);
+
+        groundGeometry.destroy();
+        boxGeometry.destroy();
+        tmpFilterData.destroy();
+        tmpPose.destroy();
+        shapeFlags.destroy();
+
+        Model model1 = new Model();
+        model1.load("cube.obj");
+        cubeMesh = model1.meshes.getFirst();
+        objects.add(new RenderablePhysicsObject(box, cubeMesh));
+
+        model1 = new Model();
+        model1.load("ground.obj");
+        objects.add(new RenderablePhysicsObject(ground, model1.meshes.getFirst()));
 
         quad = new VertexArray();
         quad.data(FRAMEBUFFER_QUAD_VERTICES, 8*Float.BYTES, FRAMEBUFFER_QUAD_INDICES);
@@ -201,16 +267,11 @@ public class Game {
         testModel.load("suzanne.obj");
 
         modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
-        model1UniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
         pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
 
         model = new ModelUniformData();
-        model.model.identity();
+        model.model.identity().translate(0, 5, 0);
         modelUniformBuffer.allocate(model);
-
-        model1 = new ModelUniformData();
-        model1.model.identity();
-        model1UniformBuffer.allocate(model1);
 
         PBRUniformData pbr = new PBRUniformData();
         pbr.ambient = new Vector4f(ColorUtil.getRGBFromK(5900), 0.3f);
@@ -234,7 +295,7 @@ public class Game {
         lightSSBO.allocate(lightArray);
 
         camera = new Camera(
-                new Vector3f(4.0f, 4.0f, 4.0f),
+                new Vector3f(4.0f, 20.0f, 4.0f),
                 new Vector3f(0.0f),
                 new Vector3f(0f, 1f, 0f),
                 (float) Math.toRadians(60f),
@@ -248,6 +309,9 @@ public class Game {
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
         font.writeAtlasToDisk(new File("font.png"));
+
+        this.player = new Player(physics, scene, camera, inputState);
+        GLFW.glfwSetInputMode(window, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_DISABLED);
     }
 
     private void start() {
@@ -296,46 +360,41 @@ public class Game {
             framerate = 1 / delta;
         }
 
-        float speed = inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) ? defaultSpeed * 10f : defaultSpeed;
+        if (inputState.wasPressed(GLFW.GLFW_KEY_F)) {
+            PxMaterial material = physics.physics().createMaterial(1.0f, 0.7f, 0f);
+            PxShapeFlags shapeFlags = new PxShapeFlags((byte) (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value));
 
-        Vector3f camPos = camera.position();
-        Vector3f targetPos = camera.target();
-        Vector3f forward = camera.forward().mul((float)delta * speed);
-        Vector3f right = camera.right().mul((float)delta * speed);
+            PxTransform tmpPose = new PxTransform(PxIDENTITYEnum.PxIdentity);
+            PxFilterData tmpFilterData = new PxFilterData(CollisionFlags.WORLD.flag(), CollisionFlags.WORLD.flag() | CollisionFlags.PLAYER.flag(), 0, 0);
 
-        boolean cameraUpdated = false;
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_W)) {
-            camPos.add(forward);
-            targetPos.add(forward);
-            cameraUpdated = true;
-        }
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_S)) {
-            camPos.sub(forward);
-            targetPos.sub(forward);
-            cameraUpdated = true;
-        }
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_D)) {
-            camPos.add(right);
-            targetPos.add(right);
-            cameraUpdated = true;
-        }
-        if (inputState.isKeyDown(GLFW.GLFW_KEY_A)) {
-            camPos.sub(right);
-            targetPos.sub(right);
-            cameraUpdated = true;
-        }
+            tmpVec.setX(0f); tmpVec.setY(15f); tmpVec.setZ(0f);
+            tmpPose.setP(tmpVec);
+            PxBoxGeometry objGeometry = new PxBoxGeometry(0.5f, 0.5f, 0.5f);
+            PxShape objShape = physics.physics().createShape(objGeometry, material, true, shapeFlags);
+            PxRigidDynamic obj = physics.physics().createRigidDynamic(tmpPose);
+            objShape.setSimulationFilterData(tmpFilterData);
+            obj.attachShape(objShape);
+            obj.setMass(50);
+            scene.addActor(obj);
 
-        if (cameraUpdated) {
-            camera.position(camPos);
-            camera.target(targetPos);
-            camera.reconfigureView();
+            objects.add(new RenderablePhysicsObject(obj, cubeMesh));
+
+            objGeometry.destroy();
+            tmpFilterData.destroy();
+            tmpPose.destroy();
+            shapeFlags.destroy();
         }
 
         model.model.rotateY((float)delta);
         modelUniformBuffer.store(model);
 
-        model1.model.identity().translate(0, (float) Math.sin(GLFW.glfwGetTime()), 0);
-        model1UniformBuffer.store(model1);
+        scene.simulate((float) delta);
+        scene.fetchResults(true);
+        this.player.update(delta);
+
+        objects.forEach(RenderablePhysicsObject::update);
+
+        inputState.update();
     }
 
     private void renderGBufferPass(double delta) {
@@ -344,6 +403,8 @@ public class Game {
         gBuffer.use();
         glBindTextureUnit(0, modelTexture.handle());
         testModel.draw(gBuffer);
+
+        objects.forEach(RenderablePhysicsObject::render);
     }
 
     private void renderForwardPass(double delta) {

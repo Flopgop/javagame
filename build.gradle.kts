@@ -60,4 +60,11 @@ dependencies {
     implementation ("org.lwjgl", "lwjgl-stb", classifier = lwjglNatives)
     implementation("org.joml", "joml-primitives", jomlPrimitivesVersion)
     implementation("org.joml", "joml", jomlVersion)
+
+    implementation("de.fabmax:physx-jni:2.6.0")
+
+    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-windows")
+    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-linux")
+    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos")
+    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos-arm64")
 }

@@ -8,7 +8,7 @@ import java.util.List;
 
 public class Model {
 
-    private final List<VertexArray> meshes = new ArrayList<>();
+    public final List<VertexArray> meshes = new ArrayList<>();
 
     @SuppressWarnings("DataFlowIssue")
     public void load(String path) {
