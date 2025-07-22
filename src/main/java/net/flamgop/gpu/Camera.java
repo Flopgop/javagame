@@ -34,6 +34,7 @@ public class Camera {
         camera.projection = new Matrix4f().perspective(fov, aspectRatio, near, far);
 
         this.cameraUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.DYNAMIC);
+        this.cameraUniformBuffer.buffer().label("Camera UBO");
         this.cameraUniformBuffer.allocate(camera);
     }
 

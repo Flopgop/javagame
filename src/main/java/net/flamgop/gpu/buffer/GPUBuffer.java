@@ -69,6 +69,10 @@ public class GPUBuffer {
         glNamedBufferSubData(this.handle, offset, buffer);
     }
 
+    public void label(String label) {
+        glObjectLabel(GL_BUFFER, this.handle, label);
+    }
+
     public int handle() {
         return this.handle;
     }

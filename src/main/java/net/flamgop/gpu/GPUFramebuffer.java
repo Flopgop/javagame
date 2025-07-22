@@ -82,7 +82,7 @@ public class GPUFramebuffer {
      * @param width width of the renderbuffer
      * @param height height of the renderbuffer
      */
-    public void renderbuffer(int internalFormat, int attachment, int width, int height) {
+    public int renderbuffer(int internalFormat, int attachment, int width, int height) {
         RenderBufferType type = renderBufferType(attachment);
         int renderbuffer;
         if (!type.special) {
@@ -114,6 +114,8 @@ public class GPUFramebuffer {
         }
         glNamedRenderbufferStorage(renderbuffer, internalFormat, width, height);
         glNamedFramebufferRenderbuffer(this.handle, attachment, GL_RENDERBUFFER, renderbuffer);
+
+        return renderbuffer;
     }
 
     private RenderBufferType renderBufferType(int attachment) {
@@ -161,6 +163,10 @@ public class GPUFramebuffer {
         this.bind();
         glClearColor(red, green, blue, alpha);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    }
+
+    public void label(String label) {
+        glObjectLabel(GL_FRAMEBUFFER, handle, label);
     }
 
     public void cleanupAttachments() {

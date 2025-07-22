@@ -194,9 +194,10 @@ public class Game {
         this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
 
         gBufferBlit = new ShaderProgram();
-        gBufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.vertex.glsl"), GL_VERTEX_SHADER);
-        gBufferBlit.attachShaderSource(ResourceHelper.loadFileContentsFromResource("gbuffer_blit.fragment.glsl"), GL_FRAGMENT_SHADER);
+        gBufferBlit.attachShaderSource("GBuffer Blit Vertex Shader", ResourceHelper.loadFileContentsFromResource("gbuffer_blit.vertex.glsl"), GL_VERTEX_SHADER);
+        gBufferBlit.attachShaderSource("GBuffer Blit Fragment Shader", ResourceHelper.loadFileContentsFromResource("gbuffer_blit.fragment.glsl"), GL_FRAGMENT_SHADER);
         gBufferBlit.link();
+        gBufferBlit.label("GBuffer Blit Program");
 
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_position"), 0);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_normal"), 1);
@@ -209,33 +210,40 @@ public class Game {
         quad.attribute(0, 3, GL_FLOAT, false, 0);
         quad.attribute(1, 3, GL_FLOAT, false, 3 * Float.BYTES);
         quad.attribute(2, 2, GL_FLOAT, false, 6 * Float.BYTES);
+        quad.label("GBuffer Quad");
 
         framebuffer = new GPUFramebuffer(width, height, (fb, w, h) -> {
             gBufferPositionTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
             gBufferPositionTexture.storage(1, GL_RGBA16F, w, h);
             glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferPositionTexture.label("GBuffer Position Texture");
 
             gBufferNormalTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
             gBufferNormalTexture.storage(1, GL_RGBA16F, w, h);
             glTextureParameteri(gBufferNormalTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTextureParameteri(gBufferNormalTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferNormalTexture.label("GBuffer Normal Texture");
 
             gBufferColorTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
             gBufferColorTexture.storage(1, GL_RGBA8, w, h);
             glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferColorTexture.label("GBuffer Color Texture");
 
             fb.texture(gBufferPositionTexture, GL_COLOR_ATTACHMENT0, 0);
             fb.texture(gBufferNormalTexture, GL_COLOR_ATTACHMENT1, 0);
             fb.texture(gBufferColorTexture, GL_COLOR_ATTACHMENT2, 0);
 
-            fb.renderbuffer(GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT, w, h);
+            int renderbuffer = fb.renderbuffer(GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT, w, h);
+            glObjectLabel(GL_RENDERBUFFER, renderbuffer, "Depth Stencil Renderbuffer");
 
             fb.drawBuffers(new int[]{GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2});
         });
+        framebuffer.label("GBuffer");
 
         pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
+        pbrUniformBuffer.buffer().label("PBR UBO");
 
         PBRUniformData pbr = new PBRUniformData();
         pbr.ambient = new Vector4f(ColorUtil.getRGBFromK(5900), 0.3f);
@@ -245,6 +253,7 @@ public class Game {
         pbrUniformBuffer.allocate(pbr);
 
         lightSSBO = new ShaderStorageBuffer(GPUBuffer.UpdateHint.DYNAMIC);
+        lightSSBO.buffer().label("Light SSBO");
         lightSSBO.allocate(level.lights());
 
         camera = new Camera(
@@ -256,8 +265,6 @@ public class Game {
                 0.01f,
                 1000f
         );
-
-//        modelTexture = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("cocount.jpg"));
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
@@ -407,7 +414,7 @@ public class Game {
     public static void main(String[] args) {
         if (args.length > 0) {
             if (args[0].equalsIgnoreCase("-renderdoc")) {
-                System.loadLibrary("renderdoc");
+                System.load("C:\\Program Files\\RenderDoc\\renderdoc.dll");
             }
         }
         Game game = new Game();

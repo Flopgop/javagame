@@ -14,7 +14,97 @@
     {
       "id": "cube",
       "model": "resource:cube.glb",
+      "position": [0,15,2],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube",
+      "model": "resource:cube.glb",
+      "position": [0,15,1],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube",
+      "model": "resource:cube.glb",
       "position": [0,15,0],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube",
+      "model": "resource:cube.glb",
+      "position": [0,15,-1],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube",
+      "model": "resource:cube.glb",
+      "position": [0,15,-2],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube1",
+      "model": "resource:cube.glb",
+      "position": [0,16,1],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube1",
+      "model": "resource:cube.glb",
+      "position": [0,16,0],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube1",
+      "model": "resource:cube.glb",
+      "position": [0,16,-1],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube2",
+      "model": "resource:cube.glb",
+      "position": [0,17,0],
+      "rotation": [0,0,0,1],
+      "collision": "resource:cube.obj",
+      "mass": 50.0,
+      "collides_with_flag": 0x07,
+      "collision_group": 0x01
+    },
+    {
+      "id": "cube3",
+      "model": "resource:cube.glb",
+      "position": [0,17,0],
       "rotation": [0,0,0,1],
       "collision": "resource:cube.obj",
       "mass": 50.0,

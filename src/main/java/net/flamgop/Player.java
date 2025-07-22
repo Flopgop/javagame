@@ -2,6 +2,7 @@ package net.flamgop;
 
 import net.flamgop.gpu.Camera;
 import net.flamgop.input.InputState;
+import net.flamgop.physics.CollisionFlags;
 import net.flamgop.physics.Physics;
 import net.flamgop.physics.PhysicsScene;
 import net.flamgop.text.TextRenderer;
@@ -39,9 +40,11 @@ public class Player {
 
         @Override
         public void onShapeHit(PxControllerShapeHit hit) {
-            if (hit.getActor().getType() == PxActorTypeEnum.eRIGID_DYNAMIC) {
+            if (hit.getActor().getType() == PxActorTypeEnum.eRIGID_DYNAMIC && !player.fly) {
                 PxRigidDynamic dynamic = PxRigidDynamic.wrapPointer(hit.getActor().getAddress());
-                if (dynamic.isSleeping()) { dynamic.wakeUp(); }
+                if (dynamic.isSleeping()) {
+                    dynamic.wakeUp();
+                }
 
                 PxVec3 pushDirection = hit.getWorldNormal();
                 float force = -player.pushForce(hit.getActor());
@@ -73,6 +76,9 @@ public class Player {
     private boolean onGround = false;
     private boolean jumpQueued = false;
 
+    private boolean fly = false;
+    private float size = 1.0f;
+
     public Player(Physics physics, PhysicsScene scene, Camera camera, InputState inputState) {
         this.camera = camera;
         this.scene = scene;
@@ -94,6 +100,12 @@ public class Player {
         this.controller = scene.controllerManager().createController(desc);
         posExt.destroy();
         controller.move(new PxVec3(0, -0.1f, 0), 0.1f, 0.016f, filters);
+
+        filters.setMFilterData(new PxFilterData(CollisionFlags.PLAYER.flag(), CollisionFlags.WORLD.flag(), 0, 0));
+    }
+
+    public void noclip() {
+        fly = !fly;
     }
 
     public float pushForce(PxActor actor) {
@@ -117,20 +129,45 @@ public class Player {
         if (inputState.isKeyDown(GLFW.GLFW_KEY_D)) movementVector.add(right);
         if (inputState.isKeyDown(GLFW.GLFW_KEY_A)) movementVector.sub(right);
 
+        if (movementVector.lengthSquared() > 0.0001f)
+            movementVector.normalize();
+
         movementVector.mul(speed);
 
         velocity.add(movementVector);
 
-        if (!onGround)
+        if (!onGround && !fly)
             velocity.add(0, (float) (scene.gravity() * delta),0);
         else {
             velocity.setComponent(1, -0.01f);
-            if (jumpQueued && inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
-                velocity.setComponent(1, 5f);
-                onGround = false;
-                jumpQueued = false;
-            } else if (jumpQueued) {
-                jumpQueued = false;
+            if (!fly) {
+                if (jumpQueued && inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
+                    velocity.setComponent(1, 5f);
+                    onGround = false;
+                    jumpQueued = false;
+                } else if (jumpQueued) {
+                    jumpQueued = false;
+                }
+
+                if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
+                    if (size == 1.0f) {
+                        size = 0.5f;
+                        controller.resize(size);
+                    }
+                } else {
+                    if (size == 0.5f) {
+                        size = 1.0f;
+                        controller.resize(size);
+                    }
+                }
+            } else {
+                if (inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
+                    velocity.setComponent(1, speed);
+                } else if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
+                    velocity.setComponent(1, -speed);
+                } else {
+                    velocity.setComponent(1, 0);
+                }
             }
         }
 
@@ -167,6 +204,10 @@ public class Player {
 
         if (inputState.wasKeyPressed(GLFW.GLFW_KEY_SPACE) && !jumpQueued) {
             jumpQueued = true;
+        }
+
+        if (inputState.wasKeyPressed(GLFW.GLFW_KEY_F)) {
+            this.noclip();
         }
     }
 

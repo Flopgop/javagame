@@ -73,6 +73,7 @@ public class Font {
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        textAtlasTexture.label(typeface.family_nameString() + " Text Atlas Texture");
 
         FT_Size_Metrics metrics = typeface.size().metrics();
         long ascent = metrics.ascender() >> 6;

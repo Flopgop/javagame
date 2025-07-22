@@ -27,6 +27,7 @@ public class DynamicEntity {
         return new DynamicEntity(
                 assetLoader,
                 physics,
+                entity.identifier,
                 entity.modelIdentifier,
                 new Vector3f(entity.position[0], entity.position[1], entity.position[2]),
                 new Quaternionf(entity.rotation[0], entity.rotation[1], entity.rotation[2], entity.rotation[3]),
@@ -50,6 +51,7 @@ public class DynamicEntity {
     public DynamicEntity(
             AssetLoader assetLoader,
             Physics physics,
+            String identifier,
             String modelIdentifier,
             Vector3f position,
             Quaternionf rotation,
@@ -92,6 +94,7 @@ public class DynamicEntity {
         }
         this.modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
         this.modelUniformBuffer.allocate(this.modelUniformData);
+        this.modelUniformBuffer.buffer().label(identifier + " Model UBO");
     }
 
     public void addToScene(PhysicsScene scene) {

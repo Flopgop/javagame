@@ -26,9 +26,10 @@ public class TextRenderer {
 
     public TextRenderer(int width, int height) {
         textShader = new ShaderProgram();
-        textShader.attachShaderSource(ResourceHelper.loadFileContentsFromResource("text.vertex.glsl"), GL_VERTEX_SHADER);
-        textShader.attachShaderSource(ResourceHelper.loadFileContentsFromResource("text.fragment.glsl"), GL_FRAGMENT_SHADER);
+        textShader.attachShaderSource("Text Vertex Shader", ResourceHelper.loadFileContentsFromResource("text.vertex.glsl"), GL_VERTEX_SHADER);
+        textShader.attachShaderSource("Text Fragment Shader", ResourceHelper.loadFileContentsFromResource("text.fragment.glsl"), GL_FRAGMENT_SHADER);
         textShader.link();
+        textShader.label("Text Program");
 
         textColorUniformLocation = glGetUniformLocation(textShader.handle(), "text_color");
         textProjectionUniformLocation = glGetUniformLocation(textShader.handle(), "projection");
@@ -48,6 +49,7 @@ public class TextRenderer {
         });
 
         textUVBuffer = new GPUBuffer(GPUBuffer.BufferUsage.DYNAMIC_DRAW);
+        textUVBuffer.label("Text UV Buffer");
         unitQuad.buffer(textUVBuffer, 1, 0, 8 * Float.BYTES);
 
         unitQuad.attribute(0, 2, GL_FLOAT, false, 0);
@@ -55,6 +57,7 @@ public class TextRenderer {
         unitQuad.attribute(2, 4, GL_FLOAT, false, 0, 1, 1);
         unitQuad.attribute(3, 2, GL_FLOAT, false, 4 * Float.BYTES, 1, 1);
         unitQuad.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
+        unitQuad.label("Text Quad");
     }
 
     public void resize(int width, int height) {

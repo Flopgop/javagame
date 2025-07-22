@@ -72,6 +72,11 @@ public class Model {
                 indices.stream().mapToInt(i -> i).toArray()
         );
 
+        boolean named = mesh.mName().length() > 0;
+        if (named) {
+            vao.label(mesh.mName().dataString());
+        }
+
         Material material = Material.MISSING_MATERIAL;
         GPUTexture texture = null;
 
@@ -104,6 +109,10 @@ public class Model {
                 } else {
                     System.out.println("Image data is uncompressed, I have no idea what to do with this!");
                 }
+            }
+
+            if (named) {
+                texture.label(mesh.mName().dataString() + " Texture");
             }
         }
 

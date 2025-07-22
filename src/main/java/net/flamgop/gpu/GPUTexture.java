@@ -95,6 +95,7 @@ public class GPUTexture {
         glTextureParameteri(MISSING_TEXTURE.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTextureParameteri(MISSING_TEXTURE.handle, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTextureParameteri(MISSING_TEXTURE.handle, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        MISSING_TEXTURE.label("Missing Texture");
     }
 
     private final int handle;
@@ -106,6 +107,10 @@ public class GPUTexture {
             throw new IllegalStateException("Failed to create a new GPU texture");
         }
         this.target = target;
+    }
+
+    public void label(String label) {
+        glObjectLabel(GL_TEXTURE, this.handle, label);
     }
 
     public void storage(int levels, int color, int width) {

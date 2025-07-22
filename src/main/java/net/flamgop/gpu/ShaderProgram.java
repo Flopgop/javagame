@@ -10,7 +10,7 @@ public class ShaderProgram {
         this.handle = glCreateProgram();
     }
 
-    public void attachShaderSource(String shaderSource, int shaderType) {
+    public void attachShaderSource(String name, String shaderSource, int shaderType) {
         int shader = glCreateShader(shaderType);
         glShaderSource(shader, shaderSource);
         glCompileShader(shader);
@@ -18,6 +18,7 @@ public class ShaderProgram {
             throw new RuntimeException(glGetShaderInfoLog(shader));
         }
         glAttachShader(handle, shader);
+        glObjectLabel(GL_SHADER, shader, name);
         glDeleteShader(shader);
     }
 
@@ -30,6 +31,10 @@ public class ShaderProgram {
 
     public int getUniformLocation(String uniformName) {
         return glGetUniformLocation(handle, uniformName);
+    }
+
+    public void label(String label) {
+        glObjectLabel(GL_PROGRAM, handle, label);
     }
 
     public int handle() {

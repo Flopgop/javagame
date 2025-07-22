@@ -94,6 +94,16 @@ public class VertexArray {
         this.buffers = new GPUBuffer[glGetInteger(GL_MAX_VERTEX_ATTRIBS)];
     }
 
+    public void label(String label) {
+        glObjectLabel(GL_VERTEX_ARRAY, this.vao, label);
+        for (int i = 0; i < this.buffers.length; i++) {
+            GPUBuffer buffer = this.buffers[i];
+            if (buffer != null)
+                buffer.label(label + " Buffer " + i);
+        }
+        this.elementBuffer.label(label + " Element Buffer");
+    }
+
     public int handle() {
         return vao;
     }
