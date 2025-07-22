@@ -6,25 +6,26 @@ import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.model.Material;
-import net.flamgop.input.InputSequenceHandler;
-import net.flamgop.input.InputState;
 import net.flamgop.level.Level;
 import net.flamgop.level.LevelLoader;
 import net.flamgop.physics.Physics;
+import net.flamgop.screen.Screen;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.gpu.uniform.PBRUniformData;
 import net.flamgop.util.ColorUtil;
 import net.flamgop.util.ResourceHelper;
+import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
-import org.lwjgl.system.MemoryStack;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.nio.IntBuffer;
+import java.util.Map;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -80,7 +81,7 @@ public class Game {
             0, 1, 2,  2, 3, 0
     };
 
-    private final long window;
+    private final Window window;
 
     private final VertexArray quad;
     private final GPUFramebuffer framebuffer;
@@ -103,8 +104,6 @@ public class Game {
     private double framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
 
     private final Camera camera;
-    private final InputSequenceHandler inputSequenceHandler;
-    private final InputState inputState;
 
     private final Physics physics;
 
@@ -112,7 +111,11 @@ public class Game {
 
     private final Level level;
 
-    private int width, height;
+    private final GPUTexture texture;
+
+    private @Nullable Screen currentScreen;
+
+    private boolean paused = false;
 
     private final double fixedDeltaTime = 1.0 / 90.0;
     private final int maxSubstepsPerFrame = 20;
@@ -126,12 +129,8 @@ public class Game {
         return font;
     }
 
-    public int width() {
-        return width;
-    }
-
-    public int height() {
-        return height;
+    public Window window() {
+        return window;
     }
 
     public Game() {
@@ -139,37 +138,18 @@ public class Game {
         physics = new Physics(4);
 
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
-
-        this.width = 1280;
-        this.height = 720;
-
-        GLFW.glfwDefaultWindowHints();
-        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4);
-        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 6);
-        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE);
-        GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
-        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_DEBUG_CONTEXT, GLFW.GLFW_TRUE);
-        this.window = GLFW.glfwCreateWindow(width, height, "game", 0L, 0L);
         GLFWErrorCallback.createPrint(System.err).set();
 
-        this.inputSequenceHandler = new InputSequenceHandler();
-        this.inputState = new InputState();
+        window = new Window("game", 1280, 720, Map.of(
+                GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4,
+                GLFW.GLFW_CONTEXT_VERSION_MINOR, 6,
+                GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE,
+                GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE,
+                GLFW.GLFW_OPENGL_DEBUG_CONTEXT, GLFW.GLFW_TRUE
+        ));
+        window.setResizeCallback(this::resize);
 
-        //noinspection resource
-        GLFW.glfwSetKeyCallback(window, (_, key, _, action, mods) -> {
-            inputSequenceHandler.handleKey(key, mods, action);
-            inputState.handleKey(key, action);
-        });
-        //noinspection resource
-        GLFW.glfwSetCursorPosCallback(window, (_, x, y) -> {
-            inputState.handleMouse(x,y);
-        });
-        //noinspection resource
-        GLFW.glfwSetMouseButtonCallback(window, (_, button, action, _) -> {
-            inputState.handleMouseButton(button, action);
-        });
-
-        GLFW.glfwMakeContextCurrent(this.window);
+        window.makeCurrent();
         GL.createCapabilities();
 
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
@@ -185,10 +165,17 @@ public class Game {
         }, 0L);
 
         GPUTexture.loadMissingTexture();
+        GPUTexture.loadBlit();
         DefaultShaders.loadDefaultShaders();
         Material.loadMissingMaterial();
 
         AssetLoader assetLoader = new AssetLoader("./assets/");
+
+        try {
+            texture = GPUTexture.loadFromBytes(assetLoader.load("resource:cocount.jpg"));
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
 
         LevelLoader loader = new LevelLoader(assetLoader);
         this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
@@ -202,8 +189,8 @@ public class Game {
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_position"), 0);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_normal"), 1);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
-        
-        textRenderer = new TextRenderer(width, height);
+
+        textRenderer = new TextRenderer(window.width(), window.height());
 
         quad = new VertexArray();
         quad.data(FRAMEBUFFER_QUAD_VERTICES, 8*Float.BYTES, FRAMEBUFFER_QUAD_INDICES);
@@ -212,7 +199,7 @@ public class Game {
         quad.attribute(2, 2, GL_FLOAT, false, 6 * Float.BYTES);
         quad.label("GBuffer Quad");
 
-        framebuffer = new GPUFramebuffer(width, height, (fb, w, h) -> {
+        framebuffer = new GPUFramebuffer(window.width(), window.height(), (fb, w, h) -> {
             gBufferPositionTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
             gBufferPositionTexture.storage(1, GL_RGBA16F, w, h);
             glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -261,7 +248,7 @@ public class Game {
                 new Vector3f(0.0f),
                 new Vector3f(0f, 1f, 0f),
                 (float) Math.toRadians(60f),
-                (float) width / height,
+                (float) window.width() / window.height(),
                 0.01f,
                 1000f
         );
@@ -270,12 +257,12 @@ public class Game {
 
         font.writeAtlasToDisk(new File("font.png"));
 
-        this.player = new Player(physics, level.scene(), camera, inputState);
-        GLFW.glfwSetInputMode(window, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_DISABLED);
+        this.player = new Player(physics, level.scene(), camera, window.inputState());
+        window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
     }
 
     private void start() {
-        GLFW.glfwShowWindow(this.window);
+        window.show();
 
         while (!this.shouldClose()) {
             double time = GLFW.glfwGetTime();
@@ -307,12 +294,10 @@ public class Game {
     }
 
     private boolean shouldClose() {
-        return GLFW.glfwWindowShouldClose(this.window);
+        return this.window.shouldClose();
     }
 
     private void resize(int width, int height) {
-        this.width = width;
-        this.height = height;
         this.camera.resize(width, height);
         this.framebuffer.resize(width, height);
         this.textRenderer.resize(width, height);
@@ -321,28 +306,31 @@ public class Game {
     private void update(double delta) {
         GLFW.glfwPollEvents();
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            IntBuffer pWidth = stack.callocInt(1);
-            IntBuffer pHeight = stack.callocInt(1);
-            GLFW.glfwGetWindowSize(window, pWidth, pHeight);
-            int width = pWidth.get(0);
-            int height = pHeight.get(0);
-            if (width != this.width || height != this.height) {
-                resize(width, height);
-            }
-        }
-
         framerateUpdateCounter -= delta;
         if (framerateUpdateCounter < 0) {
             framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
             framerate = 1 / delta;
         }
 
-        fixedUpdate(delta);
-        level.update(delta);
-        player.update(delta);
+        if (window.inputState().wasKeyPressed(GLFW.GLFW_KEY_ESCAPE)) {
+            if (paused) {
+                paused = false;
+                window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
+            } else {
+                paused = true;
+                window.setCursorMode(GLFW.GLFW_CURSOR_NORMAL);
+            }
+        }
 
-        inputState.update();
+        if (!paused) {
+
+            fixedUpdate(delta);
+            level.update(delta);
+            player.update(delta);
+
+        }
+
+        window.update();
     }
 
     private void renderGBufferPass(double delta) {
@@ -355,9 +343,11 @@ public class Game {
     }
 
     private void renderUi(double delta) {
-        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.height - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
-        textRenderer.drawText(font, inputSequenceHandler.getDebugSequence(), 5f, this.height - 3 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
-        player.renderDebug(textRenderer, delta);
+        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
+        textRenderer.drawText(font, this.window.inputSequenceHandler().getDebugSequence(), 5f, this.window.height() - 3 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
+        player.renderDebug(textRenderer, 5f, this.window.height() - 4 * (this.font.lineHeight() * 0.5f), delta);
+
+        texture.blit(5, (int) (this.window.height() - 7 * (font.lineHeight() * 0.5f) - 128), 128, 128);
     }
 
     private void render(double delta) {
@@ -386,7 +376,7 @@ public class Game {
         glBindTextureUnit(1, gBufferNormalTexture.handle());
         glBindTextureUnit(2, gBufferColorTexture.handle());
         quad.draw();
-        framebuffer.copyDepthToBackBuffer(width, height);
+        framebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
 
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
@@ -403,11 +393,11 @@ public class Game {
     }
 
     private void swap() {
-        GLFW.glfwSwapBuffers(this.window);
+        window.swap();
     }
 
     private void cleanup() {
-        GLFW.glfwDestroyWindow(this.window);
+        this.window.destroy();
         GLFW.glfwTerminate();
     }
 

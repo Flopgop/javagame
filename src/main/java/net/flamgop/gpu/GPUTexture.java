@@ -1,5 +1,10 @@
 package net.flamgop.gpu;
 
+import net.flamgop.Game;
+import net.flamgop.gpu.buffer.GPUBuffer;
+import net.flamgop.util.ResourceHelper;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.lwjgl.assimp.AITexel;
 import org.lwjgl.assimp.AITexture;
 import org.lwjgl.stb.STBImage;
@@ -7,6 +12,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
 import static org.lwjgl.opengl.GL46.*;
@@ -98,6 +104,45 @@ public class GPUTexture {
         MISSING_TEXTURE.label("Missing Texture");
     }
 
+
+    private static VertexArray ATLAS_COMPATIBLE_UNIT_QUAD;
+    private static ShaderProgram BLIT_SHADER;
+    private static int PROJECTION_LOCATION;
+    private static int TINT_LOCATION;
+    private static GPUBuffer UV_BUFFER;
+    public static void loadBlit() {
+        ATLAS_COMPATIBLE_UNIT_QUAD = new VertexArray();
+        ATLAS_COMPATIBLE_UNIT_QUAD.data(new float[]{
+                0, 1, 0, 0,
+                0, 0, 0, 1,
+                1, 0, 1, 1,
+                1, 1, 1, 0
+        }, 4 * Float.BYTES, new int[]{
+                0, 1, 2,
+                0, 2, 3
+        });
+
+        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(0, 2, GL_FLOAT, false, 0);
+        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(1, 2, GL_FLOAT, false, 2 * Float.BYTES);
+        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(2, 4, GL_FLOAT, false, 0, 1, 1);
+        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(3, 2, GL_FLOAT, false, 4 * Float.BYTES, 1, 1);
+        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
+        ATLAS_COMPATIBLE_UNIT_QUAD.label("Atlas Compatible Unit Quad");
+
+        UV_BUFFER = new GPUBuffer(GPUBuffer.BufferUsage.DYNAMIC_DRAW);
+        UV_BUFFER.label("Blit Buffer");
+        ATLAS_COMPATIBLE_UNIT_QUAD.buffer(UV_BUFFER, 1, 0, 8 * Float.BYTES);
+
+        BLIT_SHADER = new ShaderProgram();
+        BLIT_SHADER.attachShaderSource("Blit Vertex Shader", ResourceHelper.loadFileContentsFromResource("blit.vertex.glsl"), GL_VERTEX_SHADER);
+        BLIT_SHADER.attachShaderSource("Blit Fragment Shader", ResourceHelper.loadFileContentsFromResource("blit.fragment.glsl"), GL_FRAGMENT_SHADER);
+        BLIT_SHADER.link();
+        BLIT_SHADER.label("Atlas Compatible Instanced Partial Blit Program");
+
+        TINT_LOCATION = BLIT_SHADER.getUniformLocation("tint");
+        PROJECTION_LOCATION = BLIT_SHADER.getUniformLocation("projection");
+    }
+
     private final int handle;
     private final TextureTarget target;
 
@@ -111,6 +156,37 @@ public class GPUTexture {
 
     public void label(String label) {
         glObjectLabel(GL_TEXTURE, this.handle, label);
+    }
+
+    public void blit(int x, int y, int w, int h) {
+        blit(0, 0, 1, 1, x, y, w, h);
+    }
+
+    public void blit(int atlasX, int atlasY, int atlasW, int atlasH, int x, int y, int w, int h) {
+        FloatBuffer buffer = MemoryUtil.memAllocFloat(8 * Float.BYTES);
+        buffer.put(atlasX);
+        buffer.put(atlasY);
+        buffer.put(atlasW);
+        buffer.put(atlasH);
+        buffer.put(x);
+        buffer.put(y);
+        buffer.put(w);
+        buffer.put(h);
+        buffer.flip();
+        blitInstanced(1, buffer, Game.INSTANCE.window().ortho(), new Vector3f(1));
+        MemoryUtil.memFree(buffer);
+    }
+
+    public void blitInstanced(int instanceCount, FloatBuffer instances, Matrix4f projection, Vector3f tint) {
+        BLIT_SHADER.use();
+        glUniform3f(TINT_LOCATION, tint.x, tint.y, tint.z);
+        glUniformMatrix4fv(PROJECTION_LOCATION, false, projection.get(new float[16]));
+        UV_BUFFER.allocate(instances);
+        glBindTextureUnit(0, this.handle);
+        glBindVertexArray(ATLAS_COMPATIBLE_UNIT_QUAD.handle());
+        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, instances.remaining() / 8);
+        glBindVertexArray(0);
+        glBindTextureUnit(0,0);
     }
 
     public void storage(int levels, int color, int width) {

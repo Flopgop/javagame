@@ -69,7 +69,10 @@ public class Player {
     private final Vector3f velocity = new Vector3f();
 
     private final float sensitivity = 0.5f;
+    private final float crouchingSpeed = 2.5f;
     private final float speed = 5.0f;
+    private final float jumpForce = 8f;
+    private final float gravity;
 
     private float yaw = 0.0f;
     private float pitch = 0.0f;
@@ -77,7 +80,7 @@ public class Player {
     private boolean jumpQueued = false;
 
     private boolean fly = false;
-    private float size = 1.0f;
+    private boolean crouching = false;
 
     public Player(Physics physics, PhysicsScene scene, Camera camera, InputState inputState) {
         this.camera = camera;
@@ -102,6 +105,8 @@ public class Player {
         controller.move(new PxVec3(0, -0.1f, 0), 0.1f, 0.016f, filters);
 
         filters.setMFilterData(new PxFilterData(CollisionFlags.PLAYER.flag(), CollisionFlags.WORLD.flag(), 0, 0));
+
+        this.gravity = 2 * scene.gravity();
     }
 
     public void noclip() {
@@ -109,7 +114,7 @@ public class Player {
     }
 
     public float pushForce(PxActor actor) {
-        return 5000.0f;
+        return crouching ? 1000f : 5000f;
     }
 
     public PhysicsScene scene() {
@@ -122,8 +127,10 @@ public class Player {
         this.onGround = (state.getCollisionFlags() & PxControllerCollisionFlagEnum.eCOLLISION_DOWN.value) != 0;
 
         Vector3f movementVector = new Vector3f();
-        Vector3f forward = camera.forward().mul(1,0,1).normalize();
-        Vector3f right = camera.right().mul(1,0,1).normalize();
+        Vector3f forward = camera.forward();
+        if (!fly) forward = forward.mul(1,0,1).normalize();
+        Vector3f right = camera.right();
+        if (!fly) right = right.mul(1,0,1).normalize();
         if (inputState.isKeyDown(GLFW.GLFW_KEY_W)) movementVector.add(forward);
         if (inputState.isKeyDown(GLFW.GLFW_KEY_S)) movementVector.sub(forward);
         if (inputState.isKeyDown(GLFW.GLFW_KEY_D)) movementVector.add(right);
@@ -132,42 +139,40 @@ public class Player {
         if (movementVector.lengthSquared() > 0.0001f)
             movementVector.normalize();
 
-        movementVector.mul(speed);
+        movementVector.mul(crouching ? crouchingSpeed : speed);
 
         velocity.add(movementVector);
 
         if (!onGround && !fly)
-            velocity.add(0, (float) (scene.gravity() * delta),0);
-        else {
+            velocity.add(0, (float) (gravity * delta),0);
+        else if (!fly) {
             velocity.setComponent(1, -0.01f);
-            if (!fly) {
-                if (jumpQueued && inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
-                    velocity.setComponent(1, 5f);
-                    onGround = false;
-                    jumpQueued = false;
-                } else if (jumpQueued) {
-                    jumpQueued = false;
-                }
+            if (jumpQueued && inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
+                velocity.setComponent(1, jumpForce);
+                onGround = false;
+                jumpQueued = false;
+            } else if (jumpQueued) {
+                jumpQueued = false;
+            }
 
-                if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
-                    if (size == 1.0f) {
-                        size = 0.5f;
-                        controller.resize(size);
-                    }
-                } else {
-                    if (size == 0.5f) {
-                        size = 1.0f;
-                        controller.resize(size);
-                    }
+            if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
+                if (!crouching) {
+                    controller.resize(0.5f);
+                    crouching = true;
                 }
             } else {
-                if (inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
-                    velocity.setComponent(1, speed);
-                } else if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
-                    velocity.setComponent(1, -speed);
-                } else {
-                    velocity.setComponent(1, 0);
+                if (crouching) {
+                    controller.resize(1.0f);
+                    crouching = false;
                 }
+            }
+        } else {
+            if (inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
+                velocity.setComponent(1, speed);
+            } else if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
+                velocity.setComponent(1, -speed);
+            } else {
+                velocity.setComponent(1, movementVector.y);
             }
         }
 
@@ -220,11 +225,11 @@ public class Player {
 
     } // do nothing for now?
 
-    public void renderDebug(TextRenderer textRenderer, double delta) {
+    public void renderDebug(TextRenderer textRenderer, float x, float y, double delta) {
         textRenderer.drawText(
                 Game.INSTANCE.font(),
                 String.format("Position: %.2f %.2f %.2f\nVelocity: %.2f %.2f %.2f\nOnGround: %s", positionView.x(), positionView.y(), positionView.z(), velocity.x(), velocity.y(), velocity.z(), this.onGround ? "true" : "false"),
-                5f, Game.INSTANCE.height() - 4 * (Game.INSTANCE.font().lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f)
+                x, y, 0.5f, new Vector3f(1.0f, 0.0f, 0.0f)
         );
     }
 }

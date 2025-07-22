@@ -1,25 +1,19 @@
 #version 460 core
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 texcoord;
-
-layout(std140, binding = 0) uniform CameraData {
-    mat4 view;
-    mat4 proj;
-    vec3 camera_pos;
-    float _pad0; // align to 16 bytes
-} cam_in;
+layout (location = 0) in vec2 vertex_position;
+layout (location = 1) in vec2 vertex_texcoord;
+layout (location = 2) in vec4 vertex_atlas_uv;
+layout (location = 3) in vec2 vertex_instance_position;
+layout (location = 4) in vec2 vertex_instance_size;
 
 out FragmentInput {
-    vec3 screen_pos;
-    vec3 normal;
     vec2 texcoord;
 } vs_out;
 
+uniform mat4 projection;
+
 void main() {
-    gl_Position = vec4(position.xz, 0.0, 1.0);
-    vs_out.screen_pos = vec3(position.xz, 0.0);
-    vs_out.normal = normal;
-    vs_out.texcoord = texcoord;
+    vec2 worldPos = vertex_instance_position.xy + vertex_position.xy * vertex_instance_size.xy;
+    gl_Position = projection * vec4(worldPos, 0.0, 1.0);
+    vs_out.texcoord = vertex_atlas_uv.xy + vertex_texcoord * vertex_atlas_uv.zw;
 }
