@@ -12,6 +12,7 @@ import physx.physics.PxScene;
 import physx.physics.PxSceneDesc;
 import physx.support.PxArray_PxU32;
 import physx.support.PxArray_PxVec3;
+import physx.vehicle2.PxVehicleTopLevelFunctions;
 
 import java.nio.ByteBuffer;
 
@@ -34,6 +35,7 @@ public class Physics {
         System.out.printf("PhysX loaded, version: %d.%d.%d\n", versionMajor, versionMinor, versionMicro);
 
         this.foundation = PxTopLevelFunctions.CreateFoundation(version, allocator, errorCallback);
+        PxVehicleTopLevelFunctions.InitVehicleExtension(foundation);
 
         this.physics = PxTopLevelFunctions.CreatePhysics(version, foundation, tolerances);
 
@@ -58,6 +60,10 @@ public class Physics {
         return tolerances;
     }
 
+    public PxCookingParams cookingParams() {
+        return cookingParams;
+    }
+
     public PxSceneDesc defaultSceneDesc(PxVec3 gravity) {
         PxSceneDesc sceneDesc = new PxSceneDesc(tolerances());
         sceneDesc.setGravity(gravity);
@@ -78,6 +84,10 @@ public class Physics {
             AIScene scene = Assimp.aiImportFileFromMemory(bytes, Assimp.aiProcess_Triangulate | Assimp.aiProcess_JoinIdenticalVertices, (ByteBuffer) null);
             if (scene == null || scene.mNumMeshes() == 0) throw new IllegalStateException("Failed to load mesh");
             AIMesh aiMesh = AIMesh.create(scene.mMeshes().get(0));
+
+            if (aiMesh.mNumVertices() > 256) {
+                System.out.println("PhysX doesn't appreciate meshes with more than 256 vertices, this mesh has " + aiMesh.mNumVertices() + " vertices! Consider using a simplified mesh instead, or using multiple simple collision meshes without models.");
+            }
 
             PxArray_PxVec3 vertexBuffer = new PxArray_PxVec3();
             PxArray_PxU32 indexBuffer = new PxArray_PxU32();
@@ -122,6 +132,10 @@ public class Physics {
             AIScene scene = Assimp.aiImportFileFromMemory(bytes, Assimp.aiProcess_Triangulate | Assimp.aiProcess_JoinIdenticalVertices, (ByteBuffer) null);
             if (scene == null || scene.mNumMeshes() == 0) throw new IllegalStateException("Failed to load mesh");
             AIMesh aiMesh = AIMesh.create(scene.mMeshes().get(0));
+
+            if (aiMesh.mNumVertices() > 256) {
+                System.out.println("PhysX doesn't appreciate meshes with more than 256 vertices, this mesh has " + aiMesh.mNumVertices() + " vertices! Consider using a simplified mesh instead, or using multiple simple collision meshes without models.");
+            }
 
             PxArray_PxVec3 vertexBuffer = new PxArray_PxVec3();
             PxArray_PxU32 indexBuffer = new PxArray_PxU32();

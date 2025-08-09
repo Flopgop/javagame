@@ -1,14 +1,19 @@
 package net.flamgop.level;
 
 import net.flamgop.asset.AssetLoader;
+import net.flamgop.gpu.buffer.GPUBuffer;
+import net.flamgop.gpu.buffer.ShaderStorageBuffer;
+import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.uniform.Light;
 import net.flamgop.gpu.uniform.LightArray;
+import net.flamgop.gpu.uniform.PBRUniformData;
 import net.flamgop.level.json.JsonDynamicEntity;
 import net.flamgop.level.json.JsonLight;
 import net.flamgop.level.json.JsonStaticMesh;
 import net.flamgop.physics.Physics;
 import net.flamgop.physics.PhysicsScene;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 import physx.common.PxVec3;
 
 import java.util.ArrayList;
@@ -22,11 +27,32 @@ public class Level {
     private final Physics physics;
     private final PhysicsScene scene;
 
+    private final UniformBuffer pbrUniformBuffer;
+    private final ShaderStorageBuffer lightSSBO;
+
     public Level(Physics physics) {
         this.physics = physics;
         PxVec3 temp = new PxVec3();
         temp.setX(0); temp.setY(2*-9.81f); temp.setZ(0);
         this.scene = physics.createScene(physics.defaultSceneDesc(temp));
+
+        pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
+        pbrUniformBuffer.buffer().label("PBR UBO");
+
+        lightSSBO = new ShaderStorageBuffer(GPUBuffer.UpdateHint.STATIC);
+        lightSSBO.buffer().label("Light SSBO");
+    }
+
+    //ColorUtil.getRGBFromK(5900)
+    public void configurePBRData(Vector3f sunPos, Vector3f sunTarget, Vector3f sunColor, float bounds) {
+        PBRUniformData pbr = new PBRUniformData();
+        pbr.ambient = new Vector4f(sunColor, 0.3f);
+        pbr.lightColor = new Vector4f(sunColor, 5f);
+        pbr.lightDirection = new Vector3f(sunTarget).sub(sunPos).normalize();
+        pbr.lightCount = this.lights().lights.size();
+        pbrUniformBuffer.allocate(pbr);
+
+        lightSSBO.allocate(this.lights());
     }
 
     public PhysicsScene scene() {
@@ -68,6 +94,14 @@ public class Level {
 
     public LightArray lights() {
         return lightArray;
+    }
+
+    public UniformBuffer pbrUniformBuffer() {
+        return pbrUniformBuffer;
+    }
+
+    public ShaderStorageBuffer lightSSBO() {
+        return lightSSBO;
     }
 
     public void update(double delta) {

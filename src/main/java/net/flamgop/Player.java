@@ -225,11 +225,11 @@ public class Player {
 
     } // do nothing for now?
 
-    public void renderDebug(TextRenderer textRenderer, float x, float y, double delta) {
+    public void renderDebug(TextRenderer textRenderer, float x, float y, float scale, double delta) {
         textRenderer.drawText(
                 Game.INSTANCE.font(),
                 String.format("Position: %.2f %.2f %.2f\nVelocity: %.2f %.2f %.2f\nOnGround: %s", positionView.x(), positionView.y(), positionView.z(), velocity.x(), velocity.y(), velocity.z(), this.onGround ? "true" : "false"),
-                x, y, 0.5f, new Vector3f(1.0f, 0.0f, 0.0f)
+                x, y, scale, new Vector3f(1.0f, 0.0f, 0.0f)
         );
     }
 }

@@ -2,28 +2,27 @@ package net.flamgop;
 
 import net.flamgop.asset.AssetLoader;
 import net.flamgop.gpu.*;
-import net.flamgop.gpu.buffer.GPUBuffer;
-import net.flamgop.gpu.buffer.ShaderStorageBuffer;
-import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.model.Material;
 import net.flamgop.level.Level;
 import net.flamgop.level.LevelLoader;
 import net.flamgop.physics.Physics;
 import net.flamgop.screen.Screen;
+import net.flamgop.screen.widget.TexturedWidget;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
-import net.flamgop.gpu.uniform.PBRUniformData;
-import net.flamgop.util.ColorUtil;
 import net.flamgop.util.ResourceHelper;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Vector2f;
+import org.joml.Vector2i;
 import org.joml.Vector3f;
-import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.system.MemoryUtil;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.IntBuffer;
 import java.util.Map;
 
@@ -90,9 +89,8 @@ public class Game {
     private GPUTexture gBufferPositionTexture;
     private GPUTexture gBufferNormalTexture;
     private GPUTexture gBufferColorTexture;
-
-    private final ShaderStorageBuffer lightSSBO;
-    private final UniformBuffer pbrUniformBuffer;
+    private GPUTexture gBufferMaterialTexture;
+    private GPUTexture gBufferDepthTexture;
 
     private final TextRenderer textRenderer;
     private final Font font;
@@ -113,6 +111,7 @@ public class Game {
 
     private final GPUTexture texture;
 
+    private final Screen pauseScreen;
     private @Nullable Screen currentScreen;
 
     private boolean paused = false;
@@ -152,6 +151,7 @@ public class Game {
         window.makeCurrent();
         GL.createCapabilities();
 
+        glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, (IntBuffer) null, true);
         glDebugMessageCallback((source, type, id, severity, _, message, _) -> {
@@ -160,7 +160,7 @@ public class Game {
             System.out.println("  Type    : " + getTypeString(type));
             System.out.println("  ID      : " + id);
             System.out.println("  Severity: " + getSeverityString(severity));
-            System.out.println("  Message : " + message);
+            System.out.println("  Message : " + MemoryUtil.memUTF8(message));
             System.out.println();
         }, 0L);
 
@@ -176,6 +176,10 @@ public class Game {
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
+        pauseScreen = new Screen(window);
+        pauseScreen.addWidget(new TexturedWidget(texture, window, new Vector2f(0.5f, 0.5f), new Vector2i(128, 128), () -> {
+            System.out.println("Cocount!!!!");
+        }));
 
         LevelLoader loader = new LevelLoader(assetLoader);
         this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
@@ -189,6 +193,12 @@ public class Game {
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_position"), 0);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_normal"), 1);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_material"), 3);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_depth"), 4);
+
+        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_diffuse"), 0);
+        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_roughness"), 1);
+        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_metallic"), 2);
 
         textRenderer = new TextRenderer(window.width(), window.height());
 
@@ -218,30 +228,34 @@ public class Game {
             glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             gBufferColorTexture.label("GBuffer Color Texture");
 
+            gBufferMaterialTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferMaterialTexture.storage(1, GL_RGBA16F, w, h);
+            glTextureParameteri(gBufferMaterialTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(gBufferMaterialTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferMaterialTexture.label("GBuffer Material Texture");
+
+            if (gBufferDepthTexture != null) gBufferDepthTexture.destroy();
+            gBufferDepthTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferDepthTexture.storage(1, GL_DEPTH24_STENCIL8, w, h);
+            glTextureParameteri(gBufferDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(gBufferDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferDepthTexture.label("GBuffer Depth Texture");
+
             fb.texture(gBufferPositionTexture, GL_COLOR_ATTACHMENT0, 0);
             fb.texture(gBufferNormalTexture, GL_COLOR_ATTACHMENT1, 0);
             fb.texture(gBufferColorTexture, GL_COLOR_ATTACHMENT2, 0);
+            fb.texture(gBufferMaterialTexture, GL_COLOR_ATTACHMENT3, 0);
+            fb.texture(gBufferDepthTexture, GL_DEPTH_STENCIL_ATTACHMENT, 0);
 
-            int renderbuffer = fb.renderbuffer(GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT, w, h);
-            glObjectLabel(GL_RENDERBUFFER, renderbuffer, "Depth Stencil Renderbuffer");
-
-            fb.drawBuffers(new int[]{GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2});
+            fb.drawBuffers(new int[]{GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3});
+        }, (fb) -> {
+            gBufferPositionTexture.destroy();
+            gBufferNormalTexture.destroy();
+            gBufferColorTexture.destroy();
+            gBufferMaterialTexture.destroy();
+            gBufferDepthTexture.destroy();
         });
         framebuffer.label("GBuffer");
-
-        pbrUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STATIC);
-        pbrUniformBuffer.buffer().label("PBR UBO");
-
-        PBRUniformData pbr = new PBRUniformData();
-        pbr.ambient = new Vector4f(ColorUtil.getRGBFromK(5900), 0.3f);
-        pbr.lightColor = new Vector4f(ColorUtil.getRGBFromK(5900), 5f);
-        pbr.lightCount = 2;
-        pbr.lightDirection = new Vector3f(0f, 0.829f, -0.559f);
-        pbrUniformBuffer.allocate(pbr);
-
-        lightSSBO = new ShaderStorageBuffer(GPUBuffer.UpdateHint.DYNAMIC);
-        lightSSBO.buffer().label("Light SSBO");
-        lightSSBO.allocate(level.lights());
 
         camera = new Camera(
                 new Vector3f(4.0f, 20.0f, 4.0f),
@@ -273,6 +287,17 @@ public class Game {
         }
 
         this.cleanup();
+    }
+
+    private void unpause() {
+        paused = false;
+        window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
+        this.currentScreen = null;
+    }
+    private void pause() {
+        paused = true;
+        window.setCursorMode(GLFW.GLFW_CURSOR_NORMAL);
+        this.currentScreen = pauseScreen;
     }
 
     private void fixedUpdate(double delta) {
@@ -313,23 +338,19 @@ public class Game {
         }
 
         if (window.inputState().wasKeyPressed(GLFW.GLFW_KEY_ESCAPE)) {
-            if (paused) {
-                paused = false;
-                window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
-            } else {
-                paused = true;
-                window.setCursorMode(GLFW.GLFW_CURSOR_NORMAL);
-            }
+            if (paused) unpause();
+            else pause();
         }
 
         if (!paused) {
-
             fixedUpdate(delta);
             level.update(delta);
             player.update(delta);
-
         }
 
+        if (currentScreen != null) {
+            currentScreen.update(delta);
+        }
         window.update();
     }
 
@@ -343,17 +364,22 @@ public class Game {
     }
 
     private void renderUi(double delta) {
-        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 2 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
-        textRenderer.drawText(font, this.window.inputSequenceHandler().getDebugSequence(), 5f, this.window.height() - 3 * (font.lineHeight() * 0.5f), 0.5f, new Vector3f(1.0f, 0.0f, 0.0f));
-        player.renderDebug(textRenderer, 5f, this.window.height() - 4 * (this.font.lineHeight() * 0.5f), delta);
+        float textScale = 1f / 3f;
+        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 3 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+        textRenderer.drawText(font, this.window.inputSequenceHandler().getDebugSequence(), 5f, this.window.height() - 4 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+        player.renderDebug(textRenderer, 5f, this.window.height() - 5 * (this.font.lineHeight() * textScale), textScale, delta);
 
-        texture.blit(5, (int) (this.window.height() - 7 * (font.lineHeight() * 0.5f) - 128), 128, 128);
+        if (currentScreen != null) {
+            currentScreen.render(delta);
+        }
     }
 
     private void render(double delta) {
         glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // backbuffer color is bright fucking red so that we know when the framebuffer isn't drawing properly
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        framebuffer.clear(0.2f, 0.2f, 0.2f, 1.0f);
+
+        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        framebuffer.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glFrontFace(GL_CCW);
         glCullFace(GL_BACK);
@@ -369,12 +395,14 @@ public class Game {
 
         framebuffer.unbind();
         camera.bind(0);
-        pbrUniformBuffer.bind(1);
-        lightSSBO.bind(2);
+        level.pbrUniformBuffer().bind(1);
+        level.lightSSBO().bind(2);
         gBufferBlit.use();
         glBindTextureUnit(0, gBufferPositionTexture.handle());
         glBindTextureUnit(1, gBufferNormalTexture.handle());
         glBindTextureUnit(2, gBufferColorTexture.handle());
+        glBindTextureUnit(3, gBufferMaterialTexture.handle());
+        glBindTextureUnit(4, gBufferDepthTexture.handle());
         quad.draw();
         framebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
 
@@ -401,7 +429,7 @@ public class Game {
         GLFW.glfwTerminate();
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         if (args.length > 0) {
             if (args[0].equalsIgnoreCase("-renderdoc")) {
                 System.load("C:\\Program Files\\RenderDoc\\renderdoc.dll");

@@ -2,13 +2,13 @@ package net.flamgop.screen.widget;
 
 import net.flamgop.input.InputState;
 import org.joml.Vector2f;
+import org.joml.Vector2i;
 
 public interface Widget {
-    Vector2f position();
-    Vector2f size();
-    boolean hovered();
+    Vector2i position();
+    Vector2i size();
     void hovered(boolean hovered);
     void click();
     void update(InputState inputState, double delta);
-    void draw(Vector2f position);
+    void draw(Vector2i position);
 }

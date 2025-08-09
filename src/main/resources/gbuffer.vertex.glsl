@@ -8,7 +8,7 @@ layout(std140, binding = 0) uniform CameraData {
     mat4 view;
     mat4 proj;
     vec3 camera_pos;
-    float _pad0; // align to 16 bytes
+    float _pad0;
 } cam_in;
 
 layout(std140, binding = 1) uniform ObjectData {

@@ -9,6 +9,7 @@ import net.flamgop.level.json.JsonDynamicEntity;
 import net.flamgop.level.json.JsonLight;
 import net.flamgop.level.json.JsonStaticMesh;
 import net.flamgop.physics.Physics;
+import org.joml.Vector3f;
 
 public class LevelLoader {
 
@@ -23,6 +24,7 @@ public class LevelLoader {
     public Level load(Physics physics, String json) {
         Json5Element element = json5.parse(json);
         Json5Object root = element.getAsJson5Object();
+        Json5Object pbr = root.getAsJson5Object("pbr");
         Json5Array statics = root.getAsJson5Array("static");
         Json5Array dynamics = root.getAsJson5Array("dynamic");
         Json5Array lights = root.getAsJson5Array("lights");
@@ -33,7 +35,11 @@ public class LevelLoader {
             Json5Object mesh = meshElem.getAsJson5Object();
             JsonStaticMesh staticMesh = new JsonStaticMesh();
             staticMesh.identifier = mesh.get("id").getAsString();
-            staticMesh.modelIdentifier = mesh.get("model").getAsString();
+            if (mesh.has("model")) {
+                staticMesh.modelIdentifier = mesh.get("model").getAsString();
+            } else {
+                staticMesh.modelIdentifier = null;
+            }
             staticMesh.position = jsonArrayToFloatArray(mesh.get("position").getAsJson5Array());
             staticMesh.rotation = jsonArrayToFloatArray(mesh.get("rotation").getAsJson5Array());
             staticMesh.collisionModelIdentifier = mesh.get("collision").getAsString();
@@ -65,7 +71,13 @@ public class LevelLoader {
             level.light(light);
         }
 
+        level.configurePBRData(vector3fFromJson(pbr.get("skylight_position")), vector3fFromJson(pbr.get("skylight_target")), vector3fFromJson(pbr.get("skylight_color")), pbr.get("shadowmap_bounds").getAsFloat());
         return level;
+    }
+
+    private Vector3f vector3fFromJson(Json5Element element) {
+        Json5Array array = element.getAsJson5Array();
+        return new Vector3f(array.get(0).getAsFloat(), array.get(1).getAsFloat(), array.get(2).getAsFloat());
     }
 
     private float[] jsonArrayToFloatArray(Json5Array jsonArray) {

@@ -10,6 +10,7 @@
       <w>quaternionf</w>
       <w>renderbuffers</w>
       <w>renderdoc</w>
+      <w>shadowmap</w>
       <w>ssbo</w>
     </words>
   </dictionary>

@@ -5,7 +5,9 @@ import net.flamgop.gpu.DefaultShaders;
 import net.flamgop.gpu.GPUTexture;
 import net.flamgop.gpu.VertexArray;
 import net.flamgop.util.Util;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.assimp.*;
+import org.lwjgl.opengl.GL46;
 
 import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
@@ -77,50 +79,85 @@ public class Model {
             vao.label(mesh.mName().dataString());
         }
 
-        Material material = Material.MISSING_MATERIAL;
-        GPUTexture texture = null;
+        Material material;
+        GPUTexture diffuse = null;
+        GPUTexture roughness = null;
+        GPUTexture metallic = null;
 
         if (mesh.mMaterialIndex() >= 0) {
             AIMaterial aiMaterial = AIMaterial.create(scene.mMaterials().get(mesh.mMaterialIndex()));
 
-            AIString path = AIString.calloc();
-            int[] texIndex = new int[1];
-            Assimp.aiGetMaterialTexture(aiMaterial, Assimp.aiTextureType_BASE_COLOR, 0, path, null, texIndex, null, null, null, null);
-            String texturePath = path.dataString();
-            path.free();
-
-            if (!texturePath.isEmpty()) {
-                if (texturePath.startsWith("*")) {
-                    int id = Integer.parseInt(texturePath.substring(1));
-                    AITexture aiTexture = AITexture.create(scene.mTextures().get(id));
-                    texture = GPUTexture.loadFromAssimpTexture(aiTexture);
-                } else {
-                    try {
-                        System.out.println("Loading texture: " + texturePath);
-                        texture = GPUTexture.loadFromBytes(assetLoader.load("file:" + texturePath));
-                    } catch (FileNotFoundException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            } else if (texIndex[0] >= 0) {
-                AITexture aiTexture = AITexture.create(scene.mTextures().get(texIndex[0]));
-                if (aiTexture.mHeight() == 0) {
-                    texture = GPUTexture.loadFromAssimpTexture(aiTexture);
-                } else {
-                    System.out.println("Image data is uncompressed, I have no idea what to do with this!");
-                }
+            for (int i = Assimp.aiTextureType_NONE; i < Assimp.aiTextureType_MAYA_SPECULAR_ROUGHNESS + 1; i++) {
+                int count = Assimp.aiGetMaterialTextureCount(aiMaterial, i);
+                if (count > 0)
+                    System.out.println("Object has " + count + " textures of type " + Assimp.aiTextureTypeToString(i));
             }
 
-            if (named) {
-                texture.label(mesh.mName().dataString() + " Texture");
-            }
+            diffuse = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_BASE_COLOR);
+            if (diffuse == null) diffuse = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_DIFFUSE);
+            roughness = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_DIFFUSE_ROUGHNESS);
+            metallic = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_METALNESS);
         }
 
-        if (texture != null) {
-            material = new Material(DefaultShaders.GBUFFER, texture);
+        if (roughness != null) {
+            GL46.glTextureParameteri(roughness.handle(), GL46.GL_TEXTURE_MIN_FILTER, GL46.GL_LINEAR);
+            GL46.glTextureParameteri(roughness.handle(), GL46.GL_TEXTURE_MAG_FILTER, GL46.GL_LINEAR);
         }
+        if (metallic != null) {
+            GL46.glTextureParameteri(metallic.handle(), GL46.GL_TEXTURE_MIN_FILTER, GL46.GL_LINEAR);
+            GL46.glTextureParameteri(metallic.handle(), GL46.GL_TEXTURE_MAG_FILTER, GL46.GL_LINEAR);
+        }
+
+        material = new Material(DefaultShaders.GBUFFER,
+                diffuse != null ? diffuse : GPUTexture.MISSING_TEXTURE,
+                roughness != null ? roughness : GPUTexture.MISSING_TEXTURE,
+                metallic != null ? metallic : GPUTexture.MISSING_TEXTURE
+                );
+        System.out.println("Creating material with " + (diffuse != null ? "present" : "missing") + " diffuse, " + (roughness != null ? "present" : "missing") + " roughness, and " + (metallic != null ? "present" : "missing") + " metallic.");
 
         return new TexturedMesh(vao, material);
+    }
+
+    private @Nullable GPUTexture loadTexture(AssetLoader assetLoader, AIScene scene, AIMaterial material, int aiTextureType) {
+        int count = Assimp.aiGetMaterialTextureCount(material, aiTextureType);
+        if (count <= 0) return null;
+
+        GPUTexture texture = null;
+        String name = null;
+
+        AIString path = AIString.calloc();
+        int[] texIndex = new int[1];
+        Assimp.aiGetMaterialTexture(material, aiTextureType, 0, path, null, texIndex, null, null, null, null);
+        String texturePath = path.dataString();
+        path.free();
+
+        if (!texturePath.isEmpty()) {
+            name = texturePath;
+            if (texturePath.startsWith("*")) {
+                int id = Integer.parseInt(texturePath.substring(1));
+                AITexture aiTexture = AITexture.create(scene.mTextures().get(id));
+                texture = GPUTexture.loadFromAssimpTexture(aiTexture);
+            } else {
+                try {
+                    System.out.println("Loading texture: " + texturePath);
+                    texture = GPUTexture.loadFromBytes(assetLoader.load("file:" + texturePath));
+                } catch (FileNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        } else if (texIndex[0] >= 0) {
+            AITexture aiTexture = AITexture.create(scene.mTextures().get(texIndex[0]));
+            if (aiTexture.mHeight() == 0) {
+                texture = GPUTexture.loadFromAssimpTexture(aiTexture);
+            } else {
+                System.out.println("Image data is uncompressed, I have no idea what to do with this!");
+            }
+        }
+
+        if (name != null)
+            texture.label("Texture \"" + name + "\"");
+
+        return texture;
     }
 
     public void draw() {

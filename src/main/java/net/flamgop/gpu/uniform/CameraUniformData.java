@@ -18,7 +18,7 @@ public class CameraUniformData implements BufferSerializable {
         projection.get(16 * Float.BYTES, buf);
 
         position.get(2 * 16 * Float.BYTES, buf);
-        buf.putFloat(2 * 16 * Float.BYTES + 3 * Float.BYTES, 0f);
+        buf.putFloat(2 * 16 * Float.BYTES + 3 * Float.BYTES, 0);
     }
 
     @Override

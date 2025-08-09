@@ -21,6 +21,7 @@ import physx.physics.*;
 
 import java.io.FileNotFoundException;
 
+@SuppressWarnings("FieldCanBeLocal")
 public class StaticMesh {
     public static StaticMesh fromJson(AssetLoader assetLoader, Physics physics, JsonStaticMesh entity) {
         return new StaticMesh(
@@ -42,8 +43,9 @@ public class StaticMesh {
     private final PxTriangleMesh collisionMesh;
     private final PxTriangleMeshGeometry collisionMeshGeometry;
 
+    private final boolean hasModel;
     private final Model model;
-    private final ModelUniformData modelUniformData = new ModelUniformData();
+    private final ModelUniformData modelUniformData;
     private final UniformBuffer modelUniformBuffer;
 
     public StaticMesh(
@@ -82,15 +84,24 @@ public class StaticMesh {
         transform.destroy();
         filterData.destroy();
 
-        this.model = new Model();
-        try {
-            this.model.load(assetLoader, modelIdentifier);
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
+        if (modelIdentifier != null) {
+            this.hasModel = true;
+            this.model = new Model();
+            try {
+                this.model.load(assetLoader, modelIdentifier);
+            } catch (FileNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+            this.modelUniformData = new ModelUniformData();
+            this.modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
+            this.modelUniformBuffer.allocate(this.modelUniformData);
+            this.modelUniformBuffer.buffer().label(identifier + " Model UBO");
+        } else {
+            this.hasModel = false;
+            this.model = null;
+            this.modelUniformData = null;
+            this.modelUniformBuffer = null;
         }
-        this.modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
-        this.modelUniformBuffer.allocate(this.modelUniformData);
-        this.modelUniformBuffer.buffer().label(identifier + " Model UBO");
     }
 
     public void addToScene(PhysicsScene scene) {
@@ -98,6 +109,7 @@ public class StaticMesh {
     }
 
     public void render(double delta) {
+        if (!hasModel) return;
         PxTransform transform = actor.getGlobalPose();
         PxVec3 pos = transform.getP();
         PxQuat rot = transform.getQ();

@@ -89,18 +89,7 @@ public class GPUTexture {
     public static GPUTexture MISSING_TEXTURE;
 
     public static void loadMissingTexture() {
-        MISSING_TEXTURE = new GPUTexture(TextureTarget.TEXTURE_2D);
-        MISSING_TEXTURE.storage(1, GL_RGBA8, 2, 2);
-        ByteBuffer buffer = MemoryUtil.memAlloc(Integer.BYTES*2*2);
-        buffer.putInt(0x000000FF);
-        buffer.putInt(0xFF00FFFF);
-        buffer.putInt(0xFF00FFFF);
-        buffer.putInt(0x000000FF);
-        glTextureSubImage2D(MISSING_TEXTURE.handle(), 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
-        glTextureParameteri(MISSING_TEXTURE.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(MISSING_TEXTURE.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(MISSING_TEXTURE.handle, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTextureParameteri(MISSING_TEXTURE.handle, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        MISSING_TEXTURE = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("missing.png"));
         MISSING_TEXTURE.label("Missing Texture");
     }
 
@@ -159,10 +148,14 @@ public class GPUTexture {
     }
 
     public void blit(int x, int y, int w, int h) {
-        blit(0, 0, 1, 1, x, y, w, h);
+        blit(x, y, w, h, new Vector3f(1));
     }
 
-    public void blit(int atlasX, int atlasY, int atlasW, int atlasH, int x, int y, int w, int h) {
+    public void blit(int x, int y, int w, int h, Vector3f tint) {
+        blit(0,0,1,1,x,y,w,h,tint);
+    }
+
+    public void blit(int atlasX, int atlasY, int atlasW, int atlasH, int x, int y, int w, int h, Vector3f tint) {
         FloatBuffer buffer = MemoryUtil.memAllocFloat(8 * Float.BYTES);
         buffer.put(atlasX);
         buffer.put(atlasY);
@@ -173,7 +166,7 @@ public class GPUTexture {
         buffer.put(w);
         buffer.put(h);
         buffer.flip();
-        blitInstanced(1, buffer, Game.INSTANCE.window().ortho(), new Vector3f(1));
+        blitInstanced(1, buffer, Game.INSTANCE.window().ortho(), tint);
         MemoryUtil.memFree(buffer);
     }
 

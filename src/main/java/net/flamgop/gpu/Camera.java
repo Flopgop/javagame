@@ -5,6 +5,7 @@ import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.uniform.CameraUniformData;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 public class Camera {
     private final CameraUniformData camera = new CameraUniformData();
@@ -36,6 +37,36 @@ public class Camera {
         this.cameraUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.DYNAMIC);
         this.cameraUniformBuffer.buffer().label("Camera UBO");
         this.cameraUniformBuffer.allocate(camera);
+    }
+
+    public Vector3f[] getFrustumCornersWorldSpace() {
+        Matrix4f invViewProj = new Matrix4f(this.camera.projection).mul(this.camera.view).invert();
+        Vector3f[] corners = new Vector3f[8];
+        int i = 0;
+        for (int x = 0; x < 2; x++) {
+            for (int y = 0; y < 2; y++) {
+                for (int z = 0; z < 2; z++) {
+                    Vector4f corner = new Vector4f(
+                            2.0f * x - 1.0f,
+                            2.0f * y - 1.0f,
+                            2.0f * z - 1.0f,
+                            1.0f
+                    );
+                    corner.mul(invViewProj);
+                    corner.div(corner.w);
+                    corners[i++] = new Vector3f(corner.x, corner.y, corner.z);
+                }
+            }
+        }
+        return corners;
+    }
+
+    public Matrix4f view() {
+        return this.camera.view;
+    }
+
+    public Matrix4f projection() {
+        return this.camera.projection;
     }
 
     public void resize(int width, int height) {

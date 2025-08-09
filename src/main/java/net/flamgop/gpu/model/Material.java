@@ -28,7 +28,9 @@ public class Material {
 
     public void use() {
         for (int i = 0 ; i < textures.size() ; i++) {
-            glBindTextureUnit(i, textures.get(i).handle());
+            GPUTexture texture = textures.get(i);
+            if (texture == null) continue; // skip this index, the texture likely doesn't exist on purpose.
+            glBindTextureUnit(i, texture.handle());
         }
         shader.use();
     }
