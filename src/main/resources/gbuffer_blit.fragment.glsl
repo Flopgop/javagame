@@ -20,12 +20,14 @@ layout(std140, binding = 1) uniform PBRData {
     float light_count;
 } pbr_in;
 
+uniform mat4 shadow_view_proj;
 
 uniform sampler2D gbuffer_position;
 uniform sampler2D gbuffer_normal;
 uniform sampler2D gbuffer_color;
 uniform sampler2D gbuffer_material;
 uniform sampler2D gbuffer_depth;
+uniform sampler2D shadow_depth;
 
 layout(location = 0) out vec4 frag_color;
 
@@ -104,6 +106,36 @@ float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
+vec3 shadow_coords(vec3 world_pos) {
+    vec4 shadow_pos = shadow_view_proj * vec4(world_pos, 1.0);
+    shadow_pos.xyz /= shadow_pos.w;
+    return shadow_pos.xyz * 0.5 + 0.5;
+}
+
+float shadow_factor(vec3 world_pos) {
+    vec3 sc = shadow_coords(world_pos);
+
+    if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0)
+        return 1.0;
+
+    float current_depth = sc.z;
+
+    float bias = 0.001;
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadow_depth, 0);
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadow_depth, sc.xy + vec2(x, y) * texelSize).r;
+            shadow += current_depth - bias > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+
+    return 1.0 - shadow;
+}
+
 void main() {
     vec3 color = texture(gbuffer_color, fs_in.texcoord).rgb;
     vec3 normal = normalize(texture(gbuffer_normal, fs_in.texcoord).xyz);
@@ -121,24 +153,6 @@ void main() {
 
     vec3 V = normalize(cam_in.camera_pos - position);
     vec3 N = normal;
-
-    vec3 Ls = normalize(-pbr_in.light_direction);
-    vec3 Hs = normalize(V + Ls);
-
-    float D_sky = distributionGGX(N, Hs, roughness);
-    float G_sky = geometrySmith(N, V, Ls, roughness);
-    vec3  F_sky = fresnelSchlick(max(dot(Hs, V), 0.0), F0);
-
-    vec3 kS_sky = F_sky;
-    vec3 kD_sky = (1.0 - kS_sky) * (1.0 - metallic);
-
-    vec3 diffuse_sky  = kD_sky * (color / PI);
-    vec3 specular_sky = (D_sky * G_sky * F_sky) /
-    (4.0 * max(dot(N, V), 0.0) * max(dot(N, Ls), 0.0) + 0.001);
-
-    float NdotL_sky = max(dot(N, Ls), 0.0);
-    vec3 radiance_sky = pbr_in.light_color.rgb;
-    lighting += (diffuse_sky + specular_sky) * radiance_sky * NdotL_sky;
 
     for (int i = 0; i < int(pbr_in.light_count); i++) {
         Light light = lights[i];
@@ -167,6 +181,27 @@ void main() {
 
         lighting += (diffuse + specular) * radiance * NdotL;
     }
+
+    vec3 sunColor = pbr_in.light_color.rgb * pbr_in.light_color.a;
+    vec3 sunDir = normalize(pbr_in.light_direction);
+
+    vec3 L = normalize(-sunDir);
+    vec3 H = normalize(V + L);
+
+    float D = distributionGGX(N, H, roughness);
+    float G = geometrySmith(N, V, L, roughness);
+    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 kS = F;
+    vec3 kD = (1.0 - kS) * (1.0 - metallic);
+
+    vec3 diffuse = kD * (color / PI);
+    vec3 specular = (D * G * F) / (4.0 * max(dot(N,V), 0.0) * max(dot(N, L), 0.0) + 0.001);
+
+    float NdotL = max(dot(N, L), 0.0);
+
+    float shadow = shadow_factor(position);
+    lighting += shadow * (diffuse + specular) * sunColor * NdotL;
 
     frag_color = mix(vec4(tone_map_reinhard(lighting), 1.0), vec4(0.0, 0.0, 0.0, 1.0), float(depth == 1.0));
 }

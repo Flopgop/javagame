@@ -30,7 +30,7 @@ public class StaticMesh {
                 entity.identifier,
                 entity.modelIdentifier,
                 new Vector3f(entity.position[0], entity.position[1], entity.position[2]),
-                new Quaternionf(entity.rotation[0], entity.rotation[1], entity.rotation[2], entity.rotation[3]),
+                new Quaternionf(entity.rotation[0], entity.rotation[1], entity.rotation[2], entity.rotation[3]).normalize(),
                 entity.collisionModelIdentifier,
                 "",
                 entity.collidesWithFlag,

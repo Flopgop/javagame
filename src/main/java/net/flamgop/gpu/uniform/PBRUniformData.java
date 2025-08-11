@@ -16,9 +16,9 @@ public class PBRUniformData implements BufferSerializable {
     @Override
     public void encode(ByteBuffer buffer) {
         ambient.get(0, buffer);
-        lightColor.get(2 * (4 * Float.BYTES), buffer);
-        lightDirection.get(4 * Float.BYTES, buffer);
-        buffer.putFloat(2 * (4 * Float.BYTES) - Float.BYTES, (int)lightCount); // stupid packing semantics
+        lightColor.get(4 * Float.BYTES, buffer);
+        lightDirection.get(2 * (4 * Float.BYTES), buffer);
+        buffer.putFloat(3 * (4 * Float.BYTES) - Float.BYTES, (int)lightCount); // stupid packing semantics
     }
 
     @Override

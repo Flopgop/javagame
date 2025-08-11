@@ -71,7 +71,7 @@ public class LevelLoader {
             level.light(light);
         }
 
-        level.configurePBRData(vector3fFromJson(pbr.get("skylight_position")), vector3fFromJson(pbr.get("skylight_target")), vector3fFromJson(pbr.get("skylight_color")), pbr.get("shadowmap_bounds").getAsFloat());
+        level.configurePBRData(vector3fFromJson(pbr.get("skylight_position")), vector3fFromJson(pbr.get("skylight_target")), vector3fFromJson(pbr.get("skylight_color")));
         return level;
     }
 

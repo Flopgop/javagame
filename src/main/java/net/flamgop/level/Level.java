@@ -12,6 +12,7 @@ import net.flamgop.level.json.JsonLight;
 import net.flamgop.level.json.JsonStaticMesh;
 import net.flamgop.physics.Physics;
 import net.flamgop.physics.PhysicsScene;
+import net.flamgop.shadow.DirectionalLight;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import physx.common.PxVec3;
@@ -30,6 +31,8 @@ public class Level {
     private final UniformBuffer pbrUniformBuffer;
     private final ShaderStorageBuffer lightSSBO;
 
+    private final DirectionalLight skylight;
+
     public Level(Physics physics) {
         this.physics = physics;
         PxVec3 temp = new PxVec3();
@@ -41,18 +44,22 @@ public class Level {
 
         lightSSBO = new ShaderStorageBuffer(GPUBuffer.UpdateHint.STATIC);
         lightSSBO.buffer().label("Light SSBO");
+        skylight = new DirectionalLight();
     }
 
     //ColorUtil.getRGBFromK(5900)
-    public void configurePBRData(Vector3f sunPos, Vector3f sunTarget, Vector3f sunColor, float bounds) {
+    public void configurePBRData(Vector3f sunPos, Vector3f sunTarget, Vector3f sunColor) {
         PBRUniformData pbr = new PBRUniformData();
         pbr.ambient = new Vector4f(sunColor, 0.3f);
-        pbr.lightColor = new Vector4f(sunColor, 5f);
+        pbr.lightColor = new Vector4f(new Vector3f(sunColor).normalize(), 25f);
         pbr.lightDirection = new Vector3f(sunTarget).sub(sunPos).normalize();
         pbr.lightCount = this.lights().lights.size();
         pbrUniformBuffer.allocate(pbr);
 
         lightSSBO.allocate(this.lights());
+
+        skylight.direction = new Vector3f(sunTarget).sub(sunPos).normalize();
+        skylight.color = new Vector3f(sunColor);
     }
 
     public PhysicsScene scene() {
@@ -104,10 +111,13 @@ public class Level {
         return lightSSBO;
     }
 
+    public DirectionalLight skylight() {
+        return skylight;
+    }
+
     public void update(double delta) {
         for (DynamicEntity entity : dynamicEntities) {
-//            entity.update(delta);
-            // specific behavior TBD
+            entity.update(delta);
         }
     }
 

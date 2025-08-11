@@ -8,6 +8,7 @@ import net.flamgop.level.LevelLoader;
 import net.flamgop.physics.Physics;
 import net.flamgop.screen.Screen;
 import net.flamgop.screen.widget.TexturedWidget;
+import net.flamgop.shadow.ShadowManager;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.util.ResourceHelper;
@@ -92,6 +93,10 @@ public class Game {
     private GPUTexture gBufferMaterialTexture;
     private GPUTexture gBufferDepthTexture;
 
+    private final GPUFramebuffer shadowFramebuffer;
+    private GPUTexture shadowDepthTexture;
+    private final int shadowWidth = 4096, shadowHeight = 4096;
+
     private final TextRenderer textRenderer;
     private final Font font;
 
@@ -108,6 +113,8 @@ public class Game {
     private final Player player;
 
     private final Level level;
+
+    private final ShadowManager shadowManager;
 
     private final GPUTexture texture;
 
@@ -168,6 +175,7 @@ public class Game {
         GPUTexture.loadBlit();
         DefaultShaders.loadDefaultShaders();
         Material.loadMissingMaterial();
+        shadowManager = new ShadowManager();
 
         AssetLoader assetLoader = new AssetLoader("./assets/");
 
@@ -195,6 +203,7 @@ public class Game {
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_material"), 3);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_depth"), 4);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("shadow_depth"), 5);
 
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_diffuse"), 0);
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_roughness"), 1);
@@ -257,6 +266,19 @@ public class Game {
         });
         framebuffer.label("GBuffer");
 
+        shadowFramebuffer = new GPUFramebuffer(shadowWidth, shadowHeight, (fb, w, h) -> {
+            shadowDepthTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            shadowDepthTexture.storage(1, GL_DEPTH24_STENCIL8, w, h);
+            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            shadowDepthTexture.label("Shadow Depth Texture");
+
+            fb.texture(shadowDepthTexture, GL_DEPTH_STENCIL_ATTACHMENT, 0);
+        }, (fb) -> {
+            shadowDepthTexture.destroy();
+        });
+        shadowFramebuffer.label("Shadow Framebuffer");
+
         camera = new Camera(
                 new Vector3f(4.0f, 20.0f, 4.0f),
                 new Vector3f(0.0f),
@@ -264,7 +286,7 @@ public class Game {
                 (float) Math.toRadians(60f),
                 (float) window.width() / window.height(),
                 0.01f,
-                1000f
+                100f
         );
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
@@ -363,6 +385,13 @@ public class Game {
 
     }
 
+    private void renderShadowPass(double delta) {
+        shadowManager.prepareShadowPass();
+        shadowManager.bind(ShadowManager.getShadowMatrix(camera, level.skylight()), null);
+        level.render(delta);
+        shadowManager.finishShadowPass();
+    }
+
     private void renderUi(double delta) {
         float textScale = 1f / 3f;
         textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 3 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
@@ -375,9 +404,30 @@ public class Game {
     }
 
     private void render(double delta) {
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, "Frame");
         glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // backbuffer color is bright fucking red so that we know when the framebuffer isn't drawing properly
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 1, "Shadow Pass");
+
+        glViewport(0,0,shadowWidth,shadowHeight);
+        shadowFramebuffer.clear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+        glFrontFace(GL_CCW);
+        glCullFace(GL_FRONT);
+
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+
+        renderShadowPass(delta);
+
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_DEPTH_TEST);
+
+        glPopDebugGroup();
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 2, "GBuffer Pass");
+
+        glViewport(0,0,window.width(),window.height());
         glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
         framebuffer.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -393,6 +443,9 @@ public class Game {
         glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
 
+        glPopDebugGroup();
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 3, "GBuffer Blit");
+
         framebuffer.unbind();
         camera.bind(0);
         level.pbrUniformBuffer().bind(1);
@@ -403,8 +456,13 @@ public class Game {
         glBindTextureUnit(2, gBufferColorTexture.handle());
         glBindTextureUnit(3, gBufferMaterialTexture.handle());
         glBindTextureUnit(4, gBufferDepthTexture.handle());
+        glBindTextureUnit(5, shadowDepthTexture.handle());
+        shadowManager.bind(ShadowManager.getShadowMatrix(camera, level.skylight()), gBufferBlit);
         quad.draw();
         framebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
+
+        glPopDebugGroup();
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 4, "Forward Pass");
 
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
@@ -414,10 +472,16 @@ public class Game {
         glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
 
+        glPopDebugGroup();
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 5, "UI Pass");
+
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         renderUi(delta);
         glDisable(GL_BLEND);
+
+        glPopDebugGroup();
+        glPopDebugGroup();
     }
 
     private void swap() {
