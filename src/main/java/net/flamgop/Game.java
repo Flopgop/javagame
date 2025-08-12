@@ -20,6 +20,7 @@ import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryUtil;
+import org.renderdoc.api.RenderDoc;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -81,6 +82,8 @@ public class Game {
             0, 1, 2,  2, 3, 0
     };
 
+    private final @Nullable RenderDoc renderDoc;
+
     private final Window window;
 
     private final VertexArray quad;
@@ -139,8 +142,16 @@ public class Game {
         return window;
     }
 
-    public Game() {
+    public Game(@Nullable RenderDoc renderDoc) {
         INSTANCE = this;
+        this.renderDoc = renderDoc;
+
+        if (renderDoc != null) {
+            renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.API_VALIDATION, 1);
+            renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.CAPTURE_CALLSTACKS, 1);
+            renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.VERIFY_BUFFER_ACCESS, 1);
+        }
+
         physics = new Physics(4);
 
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
@@ -161,6 +172,7 @@ public class Game {
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, (IntBuffer) null, true);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, (IntBuffer) null, false);
         glDebugMessageCallback((source, type, id, severity, _, message, _) -> {
             System.out.println("OpenGL Debug Message:");
             System.out.println("  Source  : " + getSourceString(source));
@@ -350,6 +362,7 @@ public class Game {
         this.textRenderer.resize(width, height);
     }
 
+    private boolean overlayEnabled = true;
     private void update(double delta) {
         GLFW.glfwPollEvents();
 
@@ -362,6 +375,16 @@ public class Game {
         if (window.inputState().wasKeyPressed(GLFW.GLFW_KEY_ESCAPE)) {
             if (paused) unpause();
             else pause();
+        }
+
+        if (renderDoc != null && window.inputState().wasKeyPressed(GLFW.GLFW_KEY_PERIOD)) {
+            if (overlayEnabled) {
+                overlayEnabled = false;
+                renderDoc.maskOverlayBits(RenderDoc.OverlayBits.NONE.bits(), RenderDoc.OverlayBits.NONE.bits());
+            } else {
+                overlayEnabled = true;
+                renderDoc.maskOverlayBits(RenderDoc.OverlayBits.DEFAULT.bits(), RenderDoc.OverlayBits.DEFAULT.bits());
+            }
         }
 
         if (!paused) {
@@ -494,12 +517,13 @@ public class Game {
     }
 
     public static void main(String[] args) throws IOException {
+        RenderDoc renderDoc = null;
         if (args.length > 0) {
             if (args[0].equalsIgnoreCase("-renderdoc")) {
-                System.load("C:\\Program Files\\RenderDoc\\renderdoc.dll");
+                renderDoc = RenderDoc.load(RenderDoc.KnownVersion.API_1_6_0);
             }
         }
-        Game game = new Game();
+        Game game = new Game(renderDoc);
         game.start();
     }
 }
