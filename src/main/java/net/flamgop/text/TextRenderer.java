@@ -26,8 +26,8 @@ public class TextRenderer {
 
     public TextRenderer(int width, int height) {
         textShader = new ShaderProgram();
-        textShader.attachShaderSource("Text Vertex Shader", ResourceHelper.loadFileContentsFromResource("text.vertex.glsl"), GL_VERTEX_SHADER);
-        textShader.attachShaderSource("Text Fragment Shader", ResourceHelper.loadFileContentsFromResource("text.fragment.glsl"), GL_FRAGMENT_SHADER);
+        textShader.attachShaderSource("Text Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/text.vertex.glsl"), GL_VERTEX_SHADER);
+        textShader.attachShaderSource("Text Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/text.fragment.glsl"), GL_FRAGMENT_SHADER);
         textShader.link();
         textShader.label("Text Program");
 

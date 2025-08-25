@@ -48,17 +48,17 @@ public class Level {
     }
 
     //ColorUtil.getRGBFromK(5900)
-    public void configurePBRData(Vector3f sunPos, Vector3f sunTarget, Vector3f sunColor) {
+    public void configurePBRData(Vector3f sunPos, Vector3f sunColor) {
         PBRUniformData pbr = new PBRUniformData();
         pbr.ambient = new Vector4f(sunColor, 0.3f);
         pbr.lightColor = new Vector4f(new Vector3f(sunColor).normalize(), 25f);
-        pbr.lightDirection = new Vector3f(sunTarget).sub(sunPos).normalize();
+        pbr.lightDirection = new Vector3f(sunPos).negate().normalize();
         pbr.lightCount = this.lights().lights.size();
         pbrUniformBuffer.allocate(pbr);
 
         lightSSBO.allocate(this.lights());
 
-        skylight.direction = new Vector3f(sunTarget).sub(sunPos).normalize();
+        skylight.direction = new Vector3f(sunPos).negate().normalize();
         skylight.color = new Vector3f(sunColor);
     }
 

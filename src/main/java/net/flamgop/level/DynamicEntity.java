@@ -68,7 +68,7 @@ public class DynamicEntity {
             throw new RuntimeException(e);
         }
         collisionMeshGeometry = new PxConvexMeshGeometry(collisionMesh);
-        PxShapeFlags shapeFlags = new PxShapeFlags((byte)  (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value));
+        PxShapeFlags shapeFlags = new PxShapeFlags((byte)  (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value | PxShapeFlagEnum.eVISUALIZATION.value));
         PxTransform transform = new PxTransform(PxIDENTITYEnum.PxIdentity);
         PxFilterData filterData = new PxFilterData(collisionGroup, collidesWithFlag, 0, 0);
         PxMaterial material = physics.physics().createMaterial(1.0f, 0.7f, 0f);

@@ -31,47 +31,53 @@ public class LevelLoader {
 
         Level level = new Level(physics);
 
-        for (Json5Element meshElem : statics) {
-            Json5Object mesh = meshElem.getAsJson5Object();
-            JsonStaticMesh staticMesh = new JsonStaticMesh();
-            staticMesh.identifier = mesh.get("id").getAsString();
-            if (mesh.has("model")) {
-                staticMesh.modelIdentifier = mesh.get("model").getAsString();
-            } else {
-                staticMesh.modelIdentifier = null;
+        if (statics != null) {
+            for (Json5Element meshElem : statics) {
+                Json5Object mesh = meshElem.getAsJson5Object();
+                JsonStaticMesh staticMesh = new JsonStaticMesh();
+                staticMesh.identifier = mesh.get("id").getAsString();
+                if (mesh.has("model")) {
+                    staticMesh.modelIdentifier = mesh.get("model").getAsString();
+                } else {
+                    staticMesh.modelIdentifier = null;
+                }
+                staticMesh.position = jsonArrayToFloatArray(mesh.get("position").getAsJson5Array());
+                staticMesh.rotation = jsonArrayToFloatArray(mesh.get("rotation").getAsJson5Array());
+                staticMesh.collisionModelIdentifier = mesh.get("collision").getAsString();
+                staticMesh.collidesWithFlag = mesh.get("collides_with_flag").getAsInt();
+                staticMesh.collisionGroup = mesh.get("collision_group").getAsInt();
+                level.staticMesh(assetLoader, staticMesh);
             }
-            staticMesh.position = jsonArrayToFloatArray(mesh.get("position").getAsJson5Array());
-            staticMesh.rotation = jsonArrayToFloatArray(mesh.get("rotation").getAsJson5Array());
-            staticMesh.collisionModelIdentifier = mesh.get("collision").getAsString();
-            staticMesh.collidesWithFlag = mesh.get("collides_with_flag").getAsInt();
-            staticMesh.collisionGroup = mesh.get("collision_group").getAsInt();
-            level.staticMesh(assetLoader, staticMesh);
         }
-        for (Json5Element entityElem : dynamics) {
-            Json5Object entity = entityElem.getAsJson5Object();
-            JsonDynamicEntity dynamicEntity = new JsonDynamicEntity();
-            dynamicEntity.identifier = entity.get("id").getAsString();
-            dynamicEntity.modelIdentifier = entity.get("model").getAsString();
-            dynamicEntity.position = jsonArrayToFloatArray(entity.get("position").getAsJson5Array());
-            dynamicEntity.rotation = jsonArrayToFloatArray(entity.get("rotation").getAsJson5Array());
-            dynamicEntity.collisionModelIdentifier = entity.get("collision").getAsString();
-            dynamicEntity.mass = entity.get("mass").getAsFloat();
-            dynamicEntity.collidesWithFlag = entity.get("collides_with_flag").getAsInt();
-            dynamicEntity.collisionGroup = entity.get("collision_group").getAsInt();
-            level.dynamicEntity(assetLoader, dynamicEntity);
+        if (dynamics != null) {
+            for (Json5Element entityElem : dynamics) {
+                Json5Object entity = entityElem.getAsJson5Object();
+                JsonDynamicEntity dynamicEntity = new JsonDynamicEntity();
+                dynamicEntity.identifier = entity.get("id").getAsString();
+                dynamicEntity.modelIdentifier = entity.get("model").getAsString();
+                dynamicEntity.position = jsonArrayToFloatArray(entity.get("position").getAsJson5Array());
+                dynamicEntity.rotation = jsonArrayToFloatArray(entity.get("rotation").getAsJson5Array());
+                dynamicEntity.collisionModelIdentifier = entity.get("collision").getAsString();
+                dynamicEntity.mass = entity.get("mass").getAsFloat();
+                dynamicEntity.collidesWithFlag = entity.get("collides_with_flag").getAsInt();
+                dynamicEntity.collisionGroup = entity.get("collision_group").getAsInt();
+                level.dynamicEntity(assetLoader, dynamicEntity);
+            }
         }
-        for (Json5Element lightElem : lights) {
-            Json5Object jsonLight = lightElem.getAsJson5Object();
-            JsonLight light = new JsonLight();
-            light.position = jsonArrayToFloatArray(jsonLight.get("position").getAsJson5Array());
-            light.color = jsonArrayToFloatArray(jsonLight.get("color").getAsJson5Array());
-            light.constant = jsonLight.get("constant").getAsFloat();
-            light.linear = jsonLight.get("linear").getAsFloat();
-            light.quadratic = jsonLight.get("quadratic").getAsFloat();
-            level.light(light);
+        if (lights != null) {
+            for (Json5Element lightElem : lights) {
+                Json5Object jsonLight = lightElem.getAsJson5Object();
+                JsonLight light = new JsonLight();
+                light.position = jsonArrayToFloatArray(jsonLight.get("position").getAsJson5Array());
+                light.color = jsonArrayToFloatArray(jsonLight.get("color").getAsJson5Array());
+                light.constant = jsonLight.get("constant").getAsFloat();
+                light.linear = jsonLight.get("linear").getAsFloat();
+                light.quadratic = jsonLight.get("quadratic").getAsFloat();
+                level.light(light);
+            }
         }
 
-        level.configurePBRData(vector3fFromJson(pbr.get("skylight_position")), vector3fFromJson(pbr.get("skylight_target")), vector3fFromJson(pbr.get("skylight_color")));
+        level.configurePBRData(vector3fFromJson(pbr.get("skylight_position")), vector3fFromJson(pbr.get("skylight_color")));
         return level;
     }
 

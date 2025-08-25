@@ -22,7 +22,7 @@ public class ShadowManager {
 
     public ShadowManager() {
         depthOnlyShaderProgram = new ShaderProgram();
-        depthOnlyShaderProgram.attachShaderSource("Depth Only Vertex Shader", ResourceHelper.loadFileContentsFromResource("shadow.vertex.glsl"), GL_VERTEX_SHADER);
+        depthOnlyShaderProgram.attachShaderSource("Depth Only Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.vertex.glsl"), GL_VERTEX_SHADER);
         depthOnlyShaderProgram.link();
         depthOnlyShaderProgram.label("Depth Only Program");
         depthOnlyMaterial = new Material(depthOnlyShaderProgram);

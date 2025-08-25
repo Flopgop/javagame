@@ -123,8 +123,8 @@ public class GPUTexture {
         ATLAS_COMPATIBLE_UNIT_QUAD.buffer(UV_BUFFER, 1, 0, 8 * Float.BYTES);
 
         BLIT_SHADER = new ShaderProgram();
-        BLIT_SHADER.attachShaderSource("Blit Vertex Shader", ResourceHelper.loadFileContentsFromResource("blit.vertex.glsl"), GL_VERTEX_SHADER);
-        BLIT_SHADER.attachShaderSource("Blit Fragment Shader", ResourceHelper.loadFileContentsFromResource("blit.fragment.glsl"), GL_FRAGMENT_SHADER);
+        BLIT_SHADER.attachShaderSource("Blit Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/blit.vertex.glsl"), GL_VERTEX_SHADER);
+        BLIT_SHADER.attachShaderSource("Blit Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/blit.fragment.glsl"), GL_FRAGMENT_SHADER);
         BLIT_SHADER.link();
         BLIT_SHADER.label("Atlas Compatible Instanced Partial Blit Program");
 

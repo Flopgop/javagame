@@ -66,37 +66,10 @@ layout(std430, binding = 3) readonly buffer ClusterBuffer {
     Cluster clusters[];
 };
 
-vec3 tone_map_reinhard(vec3 color) {
-    return color / (color + vec3(1.0));
-}
-
-vec3 tone_map_aces(vec3 x) {
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
-
-vec3 tone_map_uncharted2(vec3 x) {
-    const float A = 0.15;
-    const float B = 0.50;
-    const float C = 0.10;
-    const float D = 0.20;
-    const float E = 0.02;
-    const float F = 0.30;
-    const float W = 11.2; // white point
-
-    vec3 curr = ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F)) - E/F;
-    vec3 white = ((vec3(W)*(A*vec3(W)+C*B)+D*E)/(vec3(W)*(A*vec3(W)+B)+D*F)) - E/F;
-    return curr / white;
-}
-
 const float PI = 3.14159265359;
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 float distributionGGX(vec3 N, vec3 H, float roughness) {
@@ -194,17 +167,72 @@ float shadow_factor(vec3 world_pos) {
 }
 
 vec4 calculate_sky(vec3 rayPos, vec3 rayDir) {
+    const float sky_brightness = 10.0;
+
     // somehow calculate procedural sky color, given all the many parameters here
     float t = clamp(rayDir.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 horizonColor = vec3(0.6, 0.8, 1.0);
-    vec3 zenithColor = vec3(0.1, 0.3, 0.6);
+    vec3 horizonColor = vec3(0.6, 0.8, 1.0) * sky_brightness;
+    vec3 zenithColor = vec3(0.1, 0.3, 0.6) * sky_brightness;
     vec3 skyColor = mix(horizonColor, zenithColor, t);
+
+    return vec4(skyColor, 1.0);
+}
+
+vec4 calculate_sun(vec3 rayPos, vec3 rayDir) {
+    const float sun_brightness = 15.0;
 
     vec3 sunDir = -normalize(pbr_in.light_direction);
     float sunAmount = max(dot(rayDir, sunDir), 0.0);
-    skyColor += vec3(1.0, 0.95, 0.8) * pow(sunAmount, 32.0);
+    vec3 sunColor = vec3(1.0, 0.95, 0.8) * pow(sunAmount, 32.0) * sun_brightness;
 
-    return vec4(skyColor, 1.0);
+    return vec4(sunColor, 1.0);
+}
+
+vec3 calculate_light_contribution(Light light, vec3 color, vec3 position, vec3 V, vec3 N, vec3 F0, float roughness, float metallic) {
+    float distance = length(light.position - position);
+
+    vec3 L = normalize(light.position - position);
+    vec3 H = normalize(V + L);
+
+    float D = distributionGGX(N, H, roughness);
+    float G = geometrySmith(N, V, L, roughness);
+    vec3  F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 kS = F;
+    vec3 kD = (1.0 - kS) * (1.0 - metallic);
+
+    vec3 diffuse  = kD * (color / PI);
+    vec3 specular = (D * G * F) /
+    (4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001);
+
+    float attenuation = 1.0 /
+    (light.constant + light.linear * distance + light.quadratic * distance * distance);
+
+    vec3 radiance = light.color * attenuation;
+    float NdotL = max(dot(N, L), 0.0);
+
+    return (diffuse + specular) * radiance * NdotL;
+}
+
+vec3 calculate_sun_contribution(vec3 direction, vec3 light_color, vec3 color, vec3 position, vec3 V, vec3 N, vec3 F0, float roughness, float metallic) {
+    vec3 L = normalize(direction);
+    vec3 H = normalize(V + L);
+
+    float D = distributionGGX(N, H, roughness);
+    float G = geometrySmith(N, V, L, roughness);
+    vec3  F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 kS = F;
+    vec3 kD = (1.0 - kS) * (1.0 - metallic);
+
+    vec3 diffuse  = kD * color / PI;
+    vec3 specular = (D * G * F) /
+    (4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001);
+
+    vec3 radiance = light_color;
+    float NdotL = max(dot(N, L), 0.0);
+
+    return (diffuse + specular) * radiance * NdotL;
 }
 
 void main() {
@@ -238,60 +266,37 @@ void main() {
         uint light_index = clusters[tile_index].light_indices[i];
 
         Light light = lights[light_index];
-        float distance = length(light.position - position);
-
-        vec3 L = normalize(light.position - position);
-        vec3 H = normalize(V + L);
-
-        float D = distributionGGX(N, H, roughness);
-        float G = geometrySmith(N, V, L, roughness);
-        vec3  F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-
-        vec3 kS = F;
-        vec3 kD = (1.0 - kS) * (1.0 - metallic);
-
-        vec3 diffuse  = kD * (color / PI);
-        vec3 specular = (D * G * F) /
-        (4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001);
-
-        float attenuation = 1.0 /
-        (light.constant + light.linear * distance + light.quadratic * distance * distance);
-
-        vec3 radiance = light.color * attenuation;
-        float NdotL = max(dot(N, L), 0.0);
-
-        lighting += (diffuse + specular) * radiance * NdotL;
+        lighting += calculate_light_contribution(light, color, position, V, N, F0, roughness, metallic);
     }
 
     vec3 sunColor = pbr_in.light_color.rgb * pbr_in.light_color.a;
-    vec3 sunDir = normalize(pbr_in.light_direction);
-
-    vec3 L = normalize(-sunDir);
-    vec3 H = normalize(V + L);
-
-    float D = distributionGGX(N, H, roughness);
-    float G = geometrySmith(N, V, L, roughness);
-    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-
-    vec3 kS = F;
-    vec3 kD = (1.0 - kS) * (1.0 - metallic);
-
-    vec3 diffuse = kD * (color / PI);
-    vec3 specular = (D * G * F) / (4.0 * max(dot(N,V), 0.0) * max(dot(N, L), 0.0) + 0.001);
-
-    float NdotL = max(dot(N, L), 0.0);
+    vec3 sunDir = -normalize(pbr_in.light_direction);
 
     float shadow = shadow_factor(position);
-    lighting += shadow * (diffuse + specular) * sunColor * NdotL;
+    lighting += shadow * calculate_sun_contribution(sunDir, sunColor, color, position, V, N, F0, roughness, metallic);
 
+    // calculate reflected light because of the sky rendering here
     vec3 R = reflect(-V, N);
-    vec4 skyReflection = calculate_sky(position, R);
-    lighting += skyReflection.rgb * kS;
+    vec4 reflectedSun = calculate_sun(position, R);
+    reflectedSun *= shadow;
+
+    vec3 kS = fresnelSchlick(max(dot(N, V), 0.0), F0);
+    vec3 envSpecular = (reflectedSun.rgb) * kS * (1.0 - roughness);
+
+    vec3 kD = (1.0 - kS) * (1.0 - metallic);
+    vec3 envDiffuse = (reflectedSun.rgb) * kD;
+
+    lighting += envDiffuse + envSpecular;
 
     vec2 ndc = fs_in.texcoord * 2.0 - 1.0;
     vec4 clipPos = vec4(ndc, 1.0, 1.0);
     vec4 viewPos = inverse(cam_in.proj) * clipPos;
     viewPos.xyz /= viewPos.w;
     vec3 rayDir = normalize((inverse(cam_in.view) * vec4(normalize(viewPos.xyz), 0.0)).xyz);
-    frag_color = mix(vec4(tone_map_reinhard(lighting), 1.0), calculate_sky(cam_in.camera_pos, rayDir), float(depth >= 1.0));
+    vec4 sky = calculate_sky(cam_in.camera_pos, rayDir);
+    vec4 sun = calculate_sun(cam_in.camera_pos, rayDir);
+
+    vec4 sky_final = sky + sun;
+
+    frag_color = mix(vec4(lighting, 1.0), sky_final, float(depth >= 1.0));
 }

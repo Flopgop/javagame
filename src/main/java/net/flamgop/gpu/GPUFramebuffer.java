@@ -25,6 +25,13 @@ public class GPUFramebuffer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    public void copyDepthToBuffer(GPUFramebuffer framebuffer, int width, int height) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, handle);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer.handle);
+        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
+    }
+
     private void init(int width, int height) {
         initCallback.init(this, width, height);
         checkCompleteness();

@@ -11,8 +11,11 @@
       <w>quaternionf</w>
       <w>renderbuffers</w>
       <w>renderdoc</w>
+      <w>rmluicore</w>
       <w>shadowmap</w>
       <w>ssbo</w>
+      <w>tonemap</w>
+      <w>valvesoftware</w>
     </words>
   </dictionary>
 </component>

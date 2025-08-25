@@ -71,12 +71,12 @@ public class ClusteredShading {
 
     public ClusteredShading(Level level) {
         gatherClustersProgram = new ShaderProgram();
-        gatherClustersProgram.attachShaderSource("Gather Clusters Compute Shader", ResourceHelper.loadFileContentsFromResource("gather_clusters.compute.glsl"), GL_COMPUTE_SHADER);
+        gatherClustersProgram.attachShaderSource("Gather Clusters Compute Shader", ResourceHelper.loadFileContentsFromResource("shaders/gather_clusters.compute.glsl"), GL_COMPUTE_SHADER);
         gatherClustersProgram.link();
         gatherClustersProgram.label("Gather Clusters Program");
 
         cullLightsProgram = new ShaderProgram();
-        cullLightsProgram.attachShaderSource("Cull Lights Compute Shader", ResourceHelper.loadFileContentsFromResource("cull_lights.compute.glsl"), GL_COMPUTE_SHADER);
+        cullLightsProgram.attachShaderSource("Cull Lights Compute Shader", ResourceHelper.loadFileContentsFromResource("shaders/cull_lights.compute.glsl"), GL_COMPUTE_SHADER);
         cullLightsProgram.link();
         cullLightsProgram.label("Cull Lights Program");
 
