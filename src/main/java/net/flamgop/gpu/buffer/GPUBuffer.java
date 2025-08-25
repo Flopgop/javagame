@@ -45,6 +45,10 @@ public class GPUBuffer {
         this.usage = usage;
     }
 
+    public void allocate(long size) {
+        glNamedBufferData(this.handle, size, this.usage.glQualifier);
+    }
+
     public void allocate(ByteBuffer buffer) {
         glNamedBufferData(this.handle, buffer, this.usage.glQualifier);
     }

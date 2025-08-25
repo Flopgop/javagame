@@ -27,7 +27,14 @@ uniform sampler2D gbuffer_normal;
 uniform sampler2D gbuffer_color;
 uniform sampler2D gbuffer_material;
 uniform sampler2D gbuffer_depth;
-uniform sampler2D shadow_depth;
+
+uniform sampler2D shadow_blue_noise;
+uniform sampler2DShadow shadow_depth;
+
+uniform float z_near;
+uniform float z_far;
+uniform ivec3 grid_size;
+uniform ivec2 screen_dimensions;
 
 layout(location = 0) out vec4 frag_color;
 
@@ -43,8 +50,20 @@ struct Light {
     vec2 _pad0;
 };
 
+struct Cluster
+{
+    vec4 min_point;
+    vec4 max_point;
+    uint count;
+    uint light_indices[128];
+};
+
 layout(std430, binding = 2) readonly buffer LightBuffer {
     Light lights[];
+};
+
+layout(std430, binding = 3) readonly buffer ClusterBuffer {
+    Cluster clusters[];
 };
 
 vec3 tone_map_reinhard(vec3 color) {
@@ -112,28 +131,80 @@ vec3 shadow_coords(vec3 world_pos) {
     return shadow_pos.xyz * 0.5 + 0.5;
 }
 
+const vec2 poissonDisk[32] = vec2[](
+    vec2(-0.326212, -0.405810),
+    vec2(-0.840144, -0.073580),
+    vec2(-0.695914,  0.457137),
+    vec2(-0.203345,  0.620716),
+    vec2( 0.962340, -0.194983),
+    vec2( 0.473434, -0.480026),
+    vec2( 0.519456,  0.767022),
+    vec2( 0.185461, -0.893124),
+    vec2( 0.507431,  0.064425),
+    vec2( 0.896420,  0.412458),
+    vec2(-0.321940, -0.932615),
+    vec2(-0.791559, -0.597710),
+    vec2(-0.413511,  0.888938),
+    vec2(-0.289492,  0.384101),
+    vec2( 0.870127, -0.761654),
+    vec2( 0.685859, -0.156046),
+    vec2( 0.469193,  0.417303),
+    vec2( 0.635334,  0.778078),
+    vec2(-0.579036, -0.699969),
+    vec2(-0.645918, -0.420190),
+    vec2(-0.342578,  0.126562),
+    vec2(-0.050064,  0.941504),
+    vec2( 0.607958, -0.903289),
+    vec2( 0.828232, -0.584902),
+    vec2( 0.742644,  0.307427),
+    vec2( 0.441680,  0.822458),
+    vec2(-0.263845, -0.711328),
+    vec2(-0.505343, -0.395172),
+    vec2(-0.157252,  0.574845),
+    vec2(-0.034527,  0.902841),
+    vec2( 0.682561, -0.274911),
+    vec2( 0.918452,  0.145421)
+);
+
 float shadow_factor(vec3 world_pos) {
     vec3 sc = shadow_coords(world_pos);
 
     if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0)
         return 1.0;
 
-    float current_depth = sc.z;
+    float current_depth = sc.z - 0.0005;
 
-    float bias = 0.001;
     float shadow = 0.0;
+    float texelScale = 2.0;
     vec2 texelSize = 1.0 / textureSize(shadow_depth, 0);
-    for(int x = -2; x <= 2; ++x)
-    {
-        for(int y = -2; y <= 2; ++y)
-        {
-            float pcfDepth = texture(shadow_depth, sc.xy + vec2(x, y) * texelSize).r;
-            shadow += current_depth - bias > pcfDepth ? 1.0 : 0.0;
-        }
-    }
-    shadow /= 25.0;
+    texelSize *= texelScale;
 
-    return 1.0 - shadow;
+    float rand = texture(shadow_blue_noise, gl_FragCoord.xy / textureSize(shadow_blue_noise, 0)).r;
+    float angle = rand * 6.2831853; // 0..2π
+    mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+
+    // Apply rotation to poisson samples
+    for (int i = 0; i < 16; i++) {
+        vec2 offset = rot * poissonDisk[i];
+        shadow += texture(shadow_depth, vec3(sc.xy + offset * texelSize, current_depth));
+    }
+    shadow /= 16.0;
+
+    return shadow;
+}
+
+vec4 calculate_sky(vec3 rayPos, vec3 rayDir) {
+    // somehow calculate procedural sky color, given all the many parameters here
+    float t = clamp(rayDir.y * 0.5 + 0.5, 0.0, 1.0);
+    vec3 horizonColor = vec3(0.6, 0.8, 1.0);
+    vec3 zenithColor = vec3(0.1, 0.3, 0.6);
+    vec3 skyColor = mix(horizonColor, zenithColor, t);
+
+    vec3 sunDir = -normalize(pbr_in.light_direction);
+    float sunAmount = max(dot(rayDir, sunDir), 0.0);
+    skyColor += vec3(1.0, 0.95, 0.8) * pow(sunAmount, 32.0);
+
+    return vec4(skyColor, 1.0);
 }
 
 void main() {
@@ -154,10 +225,20 @@ void main() {
     vec3 V = normalize(cam_in.camera_pos - position);
     vec3 N = normal;
 
-    for (int i = 0; i < int(pbr_in.light_count); i++) {
-        Light light = lights[i];
+    vec3 view_space_position = (cam_in.view * vec4(position, 1.0)).xyz;
+
+    uint z_tile = uint((log(abs(view_space_position.z) / z_near) * grid_size.z) / log(z_far / z_near));
+    vec2 tile_size = screen_dimensions / grid_size.xy;
+    uvec3 tile = uvec3(gl_FragCoord.xy / tile_size, z_tile);
+    uint tile_index = tile.x + (tile.y * grid_size.x) + (tile.z * grid_size.x * grid_size.y);
+
+    uint light_count = clusters[tile_index].count;
+
+    for (int i = 0; i < light_count; i++) {
+        uint light_index = clusters[tile_index].light_indices[i];
+
+        Light light = lights[light_index];
         float distance = length(light.position - position);
-        if (distance > light.radius) continue;
 
         vec3 L = normalize(light.position - position);
         vec3 H = normalize(V + L);
@@ -203,5 +284,14 @@ void main() {
     float shadow = shadow_factor(position);
     lighting += shadow * (diffuse + specular) * sunColor * NdotL;
 
-    frag_color = mix(vec4(tone_map_reinhard(lighting), 1.0), vec4(0.0, 0.0, 0.0, 1.0), float(depth == 1.0));
+    vec3 R = reflect(-V, N);
+    vec4 skyReflection = calculate_sky(position, R);
+    lighting += skyReflection.rgb * kS;
+
+    vec2 ndc = fs_in.texcoord * 2.0 - 1.0;
+    vec4 clipPos = vec4(ndc, 1.0, 1.0);
+    vec4 viewPos = inverse(cam_in.proj) * clipPos;
+    viewPos.xyz /= viewPos.w;
+    vec3 rayDir = normalize((inverse(cam_in.view) * vec4(normalize(viewPos.xyz), 0.0)).xyz);
+    frag_color = mix(vec4(tone_map_reinhard(lighting), 1.0), calculate_sky(cam_in.camera_pos, rayDir), float(depth >= 1.0));
 }

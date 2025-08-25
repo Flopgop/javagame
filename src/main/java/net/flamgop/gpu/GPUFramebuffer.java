@@ -67,9 +67,13 @@ public class GPUFramebuffer {
     }
 
     public void resize(int width, int height) {
+        resizeNoViewport(width, height);
+        glViewport(0,0,width,height);
+    }
+
+    public void resizeNoViewport(int width, int height) {
         cleanupAttachments();
         this.init(width, height);
-        glViewport(0,0,width,height);
     }
 
     public void bind() {

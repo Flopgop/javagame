@@ -1,5 +1,6 @@
 package org.renderdoc.api;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.foreign.*;
@@ -326,7 +327,13 @@ public class RenderDoc implements AutoCloseable {
         }
     }
 
-    public record Version(int major, int minor, int patch) {}
+    public record Version(int major, int minor, int patch) {
+        @NotNull
+        @Override
+        public String toString() {
+            return major + "." +  minor + "." + patch;
+        }
+    }
 
     private static final Linker LINKER;
     private static final SymbolLookup DEFAULT_LOOKUP;

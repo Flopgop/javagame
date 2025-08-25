@@ -1,20 +1,21 @@
 package net.flamgop;
 
+import net.flamgop.asset.AssetKey;
 import net.flamgop.asset.AssetLoader;
+import net.flamgop.asset.AssetType;
 import net.flamgop.gpu.*;
 import net.flamgop.gpu.model.Material;
 import net.flamgop.level.Level;
 import net.flamgop.level.LevelLoader;
 import net.flamgop.physics.Physics;
+import net.flamgop.screen.PauseScreen;
 import net.flamgop.screen.Screen;
-import net.flamgop.screen.widget.TexturedWidget;
 import net.flamgop.shadow.ShadowManager;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.util.ResourceHelper;
+import net.flamgop.util.Util;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Vector2f;
-import org.joml.Vector2i;
 import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
@@ -97,8 +98,9 @@ public class Game {
     private GPUTexture gBufferDepthTexture;
 
     private final GPUFramebuffer shadowFramebuffer;
+    private final GPUTexture shadowBlueNoiseTexture;
     private GPUTexture shadowDepthTexture;
-    private final int shadowWidth = 4096, shadowHeight = 4096;
+    private final int shadowResolution = 4096;
 
     private final TextRenderer textRenderer;
     private final Font font;
@@ -109,7 +111,12 @@ public class Game {
     private double framerate = 1 / frameTime;
     private double framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
 
+    private final int[] passQueries = new int[5];
+    private final long[] passTimes = new long[5];
+
     private final Camera camera;
+    private final FrustumCulling frustumCulling;
+    private final ClusteredShading clusteredShading;
 
     private final Physics physics;
 
@@ -118,8 +125,6 @@ public class Game {
     private final Level level;
 
     private final ShadowManager shadowManager;
-
-    private final GPUTexture texture;
 
     private final Screen pauseScreen;
     private @Nullable Screen currentScreen;
@@ -142,7 +147,20 @@ public class Game {
         return window;
     }
 
-    public Game(@Nullable RenderDoc renderDoc) {
+    public void screen(@Nullable Screen screen) {
+        this.currentScreen = screen;
+    }
+
+    public boolean paused() {
+        return paused;
+    }
+
+    public void paused(boolean paused) {
+        if (paused) pause();
+        else unpause();
+    }
+
+    public Game(@Nullable RenderDoc renderDoc) throws FileNotFoundException {
         INSTANCE = this;
         this.renderDoc = renderDoc;
 
@@ -150,6 +168,10 @@ public class Game {
             renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.API_VALIDATION, 1);
             renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.CAPTURE_CALLSTACKS, 1);
             renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.VERIFY_BUFFER_ACCESS, 1);
+            renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.ALLOW_UNSUPPORTED_VENDOR_EXTENSIONS, 1);
+
+            RenderDoc.Version renderDocVersion = renderDoc.getApiVersion();
+            System.out.println("RenderDoc " + renderDocVersion.toString() + " loaded.");
         }
 
         physics = new Physics(4);
@@ -191,15 +213,13 @@ public class Game {
 
         AssetLoader assetLoader = new AssetLoader("./assets/");
 
+        glCreateQueries(GL_TIME_ELAPSED, passQueries);
+
         try {
-            texture = GPUTexture.loadFromBytes(assetLoader.load("resource:cocount.jpg"));
+            pauseScreen = new PauseScreen(window, assetLoader);
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
-        pauseScreen = new Screen(window);
-        pauseScreen.addWidget(new TexturedWidget(texture, window, new Vector2f(0.5f, 0.5f), new Vector2i(128, 128), () -> {
-            System.out.println("Cocount!!!!");
-        }));
 
         LevelLoader loader = new LevelLoader(assetLoader);
         this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
@@ -215,7 +235,8 @@ public class Game {
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_material"), 3);
         glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_depth"), 4);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("shadow_depth"), 5);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("shadow_blue_noise"), 5);
+        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("shadow_depth"), 6);
 
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_diffuse"), 0);
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_roughness"), 1);
@@ -278,11 +299,13 @@ public class Game {
         });
         framebuffer.label("GBuffer");
 
-        shadowFramebuffer = new GPUFramebuffer(shadowWidth, shadowHeight, (fb, w, h) -> {
+        shadowFramebuffer = new GPUFramebuffer(shadowResolution, shadowResolution, (fb, w, h) -> {
             shadowDepthTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
             shadowDepthTexture.storage(1, GL_DEPTH24_STENCIL8, w, h);
-            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
             shadowDepthTexture.label("Shadow Depth Texture");
 
             fb.texture(shadowDepthTexture, GL_DEPTH_STENCIL_ATTACHMENT, 0);
@@ -290,6 +313,14 @@ public class Game {
             shadowDepthTexture.destroy();
         });
         shadowFramebuffer.label("Shadow Framebuffer");
+
+        try {
+            shadowBlueNoiseTexture = GPUTexture.loadFromBytes(assetLoader.load(new AssetKey(AssetType.RESOURCE, "bluenoise.png")));
+            glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_T, GL_REPEAT);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
 
         camera = new Camera(
                 new Vector3f(4.0f, 20.0f, 4.0f),
@@ -300,6 +331,8 @@ public class Game {
                 0.01f,
                 100f
         );
+        frustumCulling = new FrustumCulling(level.skylight(), shadowResolution, camera);
+        clusteredShading = new ClusteredShading(level);
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
@@ -323,12 +356,16 @@ public class Game {
         this.cleanup();
     }
 
-    private void unpause() {
+    public FrustumCulling culling() {
+        return this.frustumCulling;
+    }
+
+    public void unpause() {
         paused = false;
         window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
         this.currentScreen = null;
     }
-    private void pause() {
+    public void pause() {
         paused = true;
         window.setCursorMode(GLFW.GLFW_CURSOR_NORMAL);
         this.currentScreen = pauseScreen;
@@ -397,6 +434,14 @@ public class Game {
             currentScreen.update(delta);
         }
         window.update();
+
+        this.culling().update();
+
+        for (int i = 0; i < passQueries.length; i++) {
+            if (Util.isQueryReady(passQueries[i])) {
+                this.passTimes[i] = Util.getQueryTime(passQueries[i]);
+            }
+        }
     }
 
     private void renderGBufferPass(double delta) {
@@ -409,10 +454,23 @@ public class Game {
     }
 
     private void renderShadowPass(double delta) {
+        culling().shadow(true);
         shadowManager.prepareShadowPass();
-        shadowManager.bind(ShadowManager.getShadowMatrix(camera, level.skylight()), null);
+        shadowManager.bind(ShadowManager.getShadowMatrix(camera, level.skylight(), shadowResolution), null);
         level.render(delta);
         shadowManager.finishShadowPass();
+        culling().shadow(false);
+    }
+
+    private String intToPassName(int i) {
+        return switch (i) {
+            case 0 -> "Shadow";
+            case 1 -> "GBuffer";
+            case 2 -> "GBuffer Blit";
+            case 3 -> "Forward";
+            case 4 -> "UI";
+            default -> ""+i;
+        };
     }
 
     private void renderUi(double delta) {
@@ -420,6 +478,13 @@ public class Game {
         textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 3 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
         textRenderer.drawText(font, this.window.inputSequenceHandler().getDebugSequence(), 5f, this.window.height() - 4 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
         player.renderDebug(textRenderer, 5f, this.window.height() - 5 * (this.font.lineHeight() * textScale), textScale, delta);
+
+        for (int i = 0; i < passQueries.length; i++) {
+            textRenderer.drawText(font, String.format("Pass %s took %.3fms", intToPassName(i), ((float)this.passTimes[i] / 1e6)), 5f, this.window.height() - (8 + i) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+        }
+
+        textRenderer.drawText(font, String.format("Clustered gathering took %.3fms", ((float)clusteredShading.gatherTimeNs() / 1e6)), 5f, this.window.height() - 13 * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+        textRenderer.drawText(font, String.format("Clustered culling took %.3fms", ((float)clusteredShading.cullTimeNs() / 1e6)), 5f, this.window.height() - 14 * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
 
         if (currentScreen != null) {
             currentScreen.render(delta);
@@ -432,14 +497,15 @@ public class Game {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 1, "Shadow Pass");
+        glBeginQuery(GL_TIME_ELAPSED, passQueries[0]);
 
-        glViewport(0,0,shadowWidth,shadowHeight);
+        glViewport(0,0, shadowResolution,shadowResolution);
         shadowFramebuffer.clear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
         glFrontFace(GL_CCW);
-        glCullFace(GL_FRONT);
+        glCullFace(GL_BACK);
 
-        glDisable(GL_CULL_FACE);
+        glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
 
         renderShadowPass(delta);
@@ -447,8 +513,14 @@ public class Game {
         glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
 
+        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 2, "GBuffer Pass");
+
+        clusteredShading.compute(camera);
+
+        glPopDebugGroup();
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 3, "GBuffer Pass");
+        glBeginQuery(GL_TIME_ELAPSED, passQueries[1]);
 
         glViewport(0,0,window.width(),window.height());
         glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
@@ -458,6 +530,11 @@ public class Game {
         glCullFace(GL_BACK);
 
         glEnable(GL_CULL_FACE);
+
+        glDepthMask(false);
+
+        glDepthMask(true);
+
         glEnable(GL_DEPTH_TEST);
 
         // draw to framebuffer
@@ -466,26 +543,36 @@ public class Game {
         glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
 
+        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 3, "GBuffer Blit");
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 4, "GBuffer Blit");
+        glBeginQuery(GL_TIME_ELAPSED, passQueries[2]);
 
         framebuffer.unbind();
         camera.bind(0);
         level.pbrUniformBuffer().bind(1);
         level.lightSSBO().bind(2);
+        clusteredShading.clusterGridSSBO().bind(3);
         gBufferBlit.use();
         glBindTextureUnit(0, gBufferPositionTexture.handle());
         glBindTextureUnit(1, gBufferNormalTexture.handle());
         glBindTextureUnit(2, gBufferColorTexture.handle());
         glBindTextureUnit(3, gBufferMaterialTexture.handle());
         glBindTextureUnit(4, gBufferDepthTexture.handle());
-        glBindTextureUnit(5, shadowDepthTexture.handle());
-        shadowManager.bind(ShadowManager.getShadowMatrix(camera, level.skylight()), gBufferBlit);
+        glBindTextureUnit(5, shadowBlueNoiseTexture.handle());
+        glBindTextureUnit(6, shadowDepthTexture.handle());
+        glProgramUniform1f(gBufferBlit.handle(), gBufferBlit.getUniformLocation("z_near"), camera.near());
+        glProgramUniform1f(gBufferBlit.handle(), gBufferBlit.getUniformLocation("z_far"), camera.far());
+        glProgramUniform3i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("grid_size"), ClusteredShading.GRID_SIZE_X, ClusteredShading.GRID_SIZE_Y, ClusteredShading.GRID_SIZE_Z);
+        glProgramUniform2i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("screen_dimensions"), window.width(), window.height());
+        shadowManager.bind(ShadowManager.getShadowMatrix(camera, this.level.skylight(), shadowResolution), gBufferBlit);
         quad.draw();
         framebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
 
+        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 4, "Forward Pass");
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 5, "Forward Pass");
+        glBeginQuery(GL_TIME_ELAPSED, passQueries[3]);
 
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
@@ -495,14 +582,17 @@ public class Game {
         glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
 
+        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 5, "UI Pass");
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 6, "UI Pass");
+        glBeginQuery(GL_TIME_ELAPSED, passQueries[4]);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         renderUi(delta);
         glDisable(GL_BLEND);
 
+        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
         glPopDebugGroup();
     }

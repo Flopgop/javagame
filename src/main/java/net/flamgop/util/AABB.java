@@ -8,6 +8,14 @@ public record AABB(Vector3f min, Vector3f max) {
         this.max = new Vector3f(max);
     }
 
+    public Vector3f center() {
+        return new Vector3f(min).add(max).mul(0.5f);
+    }
+
+    public float radius() {
+        return center().distance(max);
+    }
+
     public Vector3f[] getCorners() {
         Vector3f[] corners = new Vector3f[8];
         float minX = min.x, minY = min.y, minZ = min.z;

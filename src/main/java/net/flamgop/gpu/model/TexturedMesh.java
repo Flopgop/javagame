@@ -1,6 +1,8 @@
 package net.flamgop.gpu.model;
 
 import net.flamgop.gpu.VertexArray;
+import net.flamgop.util.AABB;
+import org.joml.Vector3f;
 
 public class TexturedMesh {
 
@@ -19,9 +21,28 @@ public class TexturedMesh {
     private final VertexArray vao;
     private final Material material;
 
-    public TexturedMesh(VertexArray vao, Material material) {
+    private final AABB aabb;
+    private final Vector3f boundingSphereCenter;
+    private final float boundingSphereRadius;
+
+    public TexturedMesh(VertexArray vao, Material material, AABB aabb, Vector3f boundingSphereCenter, float boundingSphereRadius) {
         this.vao = vao;
         this.material = material;
+        this.aabb = aabb;
+        this.boundingSphereCenter = boundingSphereCenter;
+        this.boundingSphereRadius = boundingSphereRadius;
+    }
+
+    public AABB aabb() {
+        return aabb;
+    }
+
+    public Vector3f boundingSphereCenter() {
+        return boundingSphereCenter;
+    }
+
+    public float boundingSphereRadius() {
+        return boundingSphereRadius;
     }
 
     public VertexArray vao() {

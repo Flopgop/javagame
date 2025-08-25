@@ -1,11 +1,17 @@
 package net.flamgop.gpu.model;
 
+import net.flamgop.Game;
+import net.flamgop.asset.AssetKey;
 import net.flamgop.asset.AssetLoader;
+import net.flamgop.asset.AssetType;
 import net.flamgop.gpu.DefaultShaders;
 import net.flamgop.gpu.GPUTexture;
 import net.flamgop.gpu.VertexArray;
+import net.flamgop.util.AABB;
 import net.flamgop.util.Util;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.lwjgl.assimp.*;
 import org.lwjgl.opengl.GL46;
 
@@ -22,11 +28,13 @@ public class Model {
     @SuppressWarnings("DataFlowIssue")
     public void load(AssetLoader assetLoader, String identifier) throws FileNotFoundException {
         System.out.println("Loading model: " + identifier);
-        AIScene scene = Assimp.aiImportFileFromMemory(assetLoader.load(identifier), Assimp.aiProcess_Triangulate | Assimp.aiProcess_FlipUVs, (ByteBuffer) null);
+        AIScene scene = Assimp.aiImportFileFromMemory(assetLoader.load(AssetKey.fromString(identifier)), Assimp.aiProcess_Triangulate | Assimp.aiProcess_FlipUVs, (ByteBuffer) null);
         if (scene == null || (scene.mFlags() & Assimp.AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene.mRootNode() == null) {
             throw new IllegalStateException("Failed to load model");
         }
         processNode(assetLoader, scene.mRootNode(), scene);
+
+        Assimp.aiReleaseImport(scene);
     }
 
     private void processNode(AssetLoader assetLoader, AINode node, AIScene scene) {
@@ -42,6 +50,8 @@ public class Model {
     private TexturedMesh processMesh(AssetLoader assetLoader, AIMesh mesh, AIScene scene) {
         List<Float> vertices = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
+
+        float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE, minZ = Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
 
         for (int i = 0; i < mesh.mNumVertices(); i++) {
             AIVector3D vertex = mesh.mVertices().get(i);
@@ -60,7 +70,15 @@ public class Model {
                 vertices.add(0f);
                 vertices.add(0f);
             }
+
+            if (vertex.x() < minX) minX = vertex.x();
+            if (vertex.x() > maxX) maxX = vertex.x();
+            if (vertex.y() < minY) minY = vertex.y();
+            if (vertex.y() > maxY) maxY = vertex.y();
+            if (vertex.z() < minZ) minZ = vertex.z();
+            if (vertex.z() > maxZ) maxZ = vertex.z();
         }
+        AABB aabb = new AABB(new Vector3f(minX, minY, minZ), new Vector3f(maxX, maxY, maxZ));
 
         for (int i = 0; i < mesh.mNumFaces(); i++) {
             AIFace face = mesh.mFaces().get(i);
@@ -87,12 +105,6 @@ public class Model {
         if (mesh.mMaterialIndex() >= 0) {
             AIMaterial aiMaterial = AIMaterial.create(scene.mMaterials().get(mesh.mMaterialIndex()));
 
-            for (int i = Assimp.aiTextureType_NONE; i < Assimp.aiTextureType_MAYA_SPECULAR_ROUGHNESS + 1; i++) {
-                int count = Assimp.aiGetMaterialTextureCount(aiMaterial, i);
-                if (count > 0)
-                    System.out.println("Object has " + count + " textures of type " + Assimp.aiTextureTypeToString(i));
-            }
-
             diffuse = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_BASE_COLOR);
             if (diffuse == null) diffuse = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_DIFFUSE);
             roughness = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_DIFFUSE_ROUGHNESS);
@@ -115,7 +127,7 @@ public class Model {
                 );
         System.out.println("Creating material with " + (diffuse != null ? "present" : "missing") + " diffuse, " + (roughness != null ? "present" : "missing") + " roughness, and " + (metallic != null ? "present" : "missing") + " metallic.");
 
-        return new TexturedMesh(vao, material);
+        return new TexturedMesh(vao, material, aabb, aabb.center(), aabb.radius());
     }
 
     private @Nullable GPUTexture loadTexture(AssetLoader assetLoader, AIScene scene, AIMaterial material, int aiTextureType) {
@@ -140,7 +152,7 @@ public class Model {
             } else {
                 try {
                     System.out.println("Loading texture: " + texturePath);
-                    texture = GPUTexture.loadFromBytes(assetLoader.load("file:" + texturePath));
+                    texture = GPUTexture.loadFromBytes(assetLoader.load(new AssetKey(AssetType.FILE, texturePath)));
                 } catch (FileNotFoundException e) {
                     throw new RuntimeException(e);
                 }
@@ -160,8 +172,9 @@ public class Model {
         return texture;
     }
 
-    public void draw() {
+    public void draw(Matrix4f model) {
         for (TexturedMesh mesh : meshes) {
+            if (!Game.INSTANCE.culling().isVisible(mesh, model)) continue;
             mesh.draw();
         }
     }

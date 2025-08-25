@@ -17,16 +17,23 @@ public class AssetLoader {
         this.assetPath = assetPath;
     }
 
-    public ByteBuffer load(String identifier) throws FileNotFoundException {
-        String standard = identifier.toLowerCase();
-        int colonIndex = standard.indexOf(":");
-        if (colonIndex == -1) throw new IllegalStateException("Asset identifier \"" + identifier + "\" does not follow valid format of \"type:path\".");
-        String type = standard.substring(0, colonIndex);
-        String filePath = identifier.substring(colonIndex + 1);
-        return switch (type) {
-            case "resource" -> loadFromResource(filePath);
-            case "file" -> loadFromAsset(filePath);
-            default -> throw new IllegalStateException("Unexpected resource type: " + type);
+//    public ByteBuffer load(String identifier) throws FileNotFoundException {
+//        String standard = identifier.toLowerCase();
+//        int colonIndex = standard.indexOf(":");
+//        if (colonIndex == -1) throw new IllegalStateException("Asset identifier \"" + identifier + "\" does not follow valid format of \"type:path\".");
+//        String type = standard.substring(0, colonIndex);
+//        String filePath = identifier.substring(colonIndex + 1);
+//        return switch (type) {
+//            case "resource" -> loadFromResource(filePath);
+//            case "file" -> loadFromAsset(filePath);
+//            default -> throw new IllegalStateException("Unexpected resource type: " + type);
+//        };
+//    }
+
+    public ByteBuffer load(AssetKey key) throws FileNotFoundException {
+        return switch (key.type()) {
+            case RESOURCE -> loadFromResource(key.path());
+            case FILE -> loadFromAsset(key.path());
         };
     }
 

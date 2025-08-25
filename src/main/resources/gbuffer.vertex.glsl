@@ -13,6 +13,7 @@ layout(std140, binding = 0) uniform CameraData {
 
 layout(std140, binding = 1) uniform ObjectData {
     mat4 model;
+    mat4 normal;
 } obj_in;
 
 out FragmentInput {
@@ -24,7 +25,7 @@ out FragmentInput {
 void main() {
     vec4 world_pos = obj_in.model * vec4(position, 1.0);
     vs_out.world_pos = world_pos.xyz;
-    vs_out.normal = mat3(transpose(inverse(obj_in.model))) * normal;
+    vs_out.normal = mat3(obj_in.normal) * normal;
     vs_out.texcoord = texcoord;
 
     gl_Position = cam_in.proj * cam_in.view * world_pos;

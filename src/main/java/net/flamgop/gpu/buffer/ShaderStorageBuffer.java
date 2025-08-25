@@ -7,6 +7,10 @@ public class ShaderStorageBuffer extends SerializedBuffer {
         super(hint);
     }
 
+    public ShaderStorageBuffer(GPUBuffer.BufferUsage usage) {
+        super(usage);
+    }
+
     public void bind(int index) {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, buffer().handle());
     }

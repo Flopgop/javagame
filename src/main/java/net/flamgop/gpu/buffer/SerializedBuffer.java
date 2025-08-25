@@ -11,6 +11,10 @@ public class SerializedBuffer {
         this.buffer = new GPUBuffer(hint == GPUBuffer.UpdateHint.STATIC ? GPUBuffer.BufferUsage.STATIC_DRAW : hint == GPUBuffer.UpdateHint.DYNAMIC ? GPUBuffer.BufferUsage.DYNAMIC_DRAW : GPUBuffer.BufferUsage.STREAM_DRAW);
     }
 
+    public SerializedBuffer(GPUBuffer.BufferUsage usage) {
+        this.buffer = new GPUBuffer(usage);
+    }
+
     public void allocate(BufferSerializable bufferData) {
         ByteBuffer buf = MemoryUtil.memAlloc(bufferData.length());
         bufferData.encode(buf);

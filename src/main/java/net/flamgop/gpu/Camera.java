@@ -4,6 +4,7 @@ import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.uniform.CameraUniformData;
 import net.flamgop.util.AABB;
+import net.flamgop.util.FrustumPlane;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -46,12 +47,34 @@ public class Camera {
         return new AABB(min, max);
     }
 
+    public FrustumPlane[] getFrustumPlanes() {
+        Matrix4f viewProj = new Matrix4f(camera.projection).mul(camera.view);
+
+        float m00 = viewProj.m00(), m01 = viewProj.m01(), m02 = viewProj.m02(), m03 = viewProj.m03();
+        float m10 = viewProj.m10(), m11 = viewProj.m11(), m12 = viewProj.m12(), m13 = viewProj.m13();
+        float m20 = viewProj.m20(), m21 = viewProj.m21(), m22 = viewProj.m22(), m23 = viewProj.m23();
+        float m30 = viewProj.m30(), m31 = viewProj.m31(), m32 = viewProj.m32(), m33 = viewProj.m33();
+
+        return new FrustumPlane[]{
+                new FrustumPlane(new Vector3f(m03 + m00, m13 + m10, m23 + m20), m33 + m30).normalized(), // Left
+                new FrustumPlane(new Vector3f(m03 - m00, m13 - m10, m23 - m20), m33 - m30).normalized(), // Right
+                new FrustumPlane(new Vector3f(m03 + m01, m13 + m11, m23 + m21), m33 + m31).normalized(), // Bottom
+                new FrustumPlane(new Vector3f(m03 - m01, m13 - m11, m23 - m21), m33 - m31).normalized(), // Top
+                new FrustumPlane(new Vector3f(m03 + m02, m13 + m12, m23 + m22), m33 + m32).normalized(), // Near
+                new FrustumPlane(new Vector3f(m03 - m02, m13 - m12, m23 - m22), m33 - m32).normalized()  // Far
+        };
+    }
+
     public Matrix4f view() {
         return this.camera.view;
     }
 
     public Matrix4f projection() {
         return this.camera.projection;
+    }
+
+    public float aspect() {
+        return this.aspectRatio;
     }
 
     public void resize(int width, int height) {

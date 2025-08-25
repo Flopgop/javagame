@@ -8,6 +8,7 @@ uniform mat4 shadow_view_proj;
 
 layout(std140, binding = 1) uniform ObjectData {
     mat4 model;
+    mat4 normal;
 } obj_in;
 
 void main() {

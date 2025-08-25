@@ -2,6 +2,7 @@ import org.gradle.internal.os.OperatingSystem
 
 plugins {
     id("java")
+    id("com.gradleup.shadow") version "9.0.2"
 }
 
 group = "net.flamgop"
@@ -34,6 +35,14 @@ val lwjglNatives = Pair(
     }
 }
 
+tasks.shadowJar {
+    archiveClassifier.set("")
+    manifest {
+        attributes(
+            "Main-Class" to "net.flamgop.Game"
+        )
+    }
+}
 
 repositories {
     mavenCentral()

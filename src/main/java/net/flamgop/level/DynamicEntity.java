@@ -1,5 +1,6 @@
 package net.flamgop.level;
 
+import net.flamgop.asset.AssetKey;
 import net.flamgop.asset.AssetLoader;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
@@ -62,7 +63,7 @@ public class DynamicEntity {
             int collisionGroup
     ) {
         try {
-            this.collisionMesh = physics.loadConvexMesh(assetLoader.load(collisionModelIdentifier));
+            this.collisionMesh = physics.loadConvexMesh(assetLoader.load(AssetKey.fromString(collisionModelIdentifier)));
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -108,10 +109,11 @@ public class DynamicEntity {
         modelUniformData.model.identity()
                 .translate(pos.getX(), pos.getY(), pos.getZ())
                 .rotate(new Quaternionf(rot.getX(), rot.getY(), rot.getZ(), rot.getW()));
+        modelUniformData.computeNormal();
         modelUniformBuffer.store(modelUniformData);
 
         modelUniformBuffer.bind(1);
-        this.model.draw();
+        this.model.draw(modelUniformData.model);
     }
 
     public void update(double delta) {}

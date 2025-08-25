@@ -13,6 +13,8 @@ layout(std140, binding = 0) uniform CameraData {
 
 layout(std140, binding = 1) uniform ObjectData {
     mat4 model;
+    mat3 normal;
+    vec4 _pad0;
 } obj_in;
 
 out FragmentInput {
