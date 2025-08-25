@@ -6,6 +6,8 @@ build/
 
 ### semantics ###
 src/main/resources/statue.glb
+*.log
+font.png
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
