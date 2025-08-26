@@ -1,6 +1,5 @@
-package net.flamgop;
+package net.flamgop.gpu;
 
-import net.flamgop.gpu.Camera;
 import net.flamgop.gpu.model.TexturedMesh;
 import net.flamgop.shadow.DirectionalLight;
 import net.flamgop.shadow.ShadowManager;

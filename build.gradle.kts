@@ -78,4 +78,8 @@ dependencies {
     runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos-arm64")
 
     implementation("de.marhali:json5-java:2.0.0")
+
+    implementation("io.github.spair:imgui-java-binding:1.89.0")
+    implementation("io.github.spair:imgui-java-lwjgl3:1.89.0")
+    implementation("io.github.spair:imgui-java-natives-windows:1.89.0")
 }

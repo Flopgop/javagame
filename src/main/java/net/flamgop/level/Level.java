@@ -50,7 +50,7 @@ public class Level {
     //ColorUtil.getRGBFromK(5900)
     public void configurePBRData(Vector3f sunPos, Vector3f sunColor) {
         PBRUniformData pbr = new PBRUniformData();
-        pbr.ambient = new Vector4f(sunColor, 0.3f);
+        pbr.ambient = new Vector4f(new Vector3f(0.1f, 0.3f, 0.6f).normalize(), 0.5f);
         pbr.lightColor = new Vector4f(new Vector3f(sunColor).normalize(), 25f);
         pbr.lightDirection = new Vector3f(sunPos).negate().normalize();
         pbr.lightCount = this.lights().lights.size();

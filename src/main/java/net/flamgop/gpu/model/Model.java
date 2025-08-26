@@ -125,7 +125,6 @@ public class Model {
                 roughness != null ? roughness : GPUTexture.MISSING_TEXTURE,
                 metallic != null ? metallic : GPUTexture.MISSING_TEXTURE
                 );
-        System.out.println("Creating material with " + (diffuse != null ? "present" : "missing") + " diffuse, " + (roughness != null ? "present" : "missing") + " roughness, and " + (metallic != null ? "present" : "missing") + " metallic.");
 
         return new TexturedMesh(vao, material, aabb, aabb.center(), aabb.radius());
     }

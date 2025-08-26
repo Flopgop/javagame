@@ -1,7 +1,6 @@
-package net.flamgop;
+package net.flamgop.gpu;
 
-import net.flamgop.gpu.Camera;
-import net.flamgop.gpu.ShaderProgram;
+import net.flamgop.Game;
 import net.flamgop.gpu.buffer.BufferSerializable;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;

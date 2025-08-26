@@ -23,4 +23,9 @@ public class PauseScreen extends Screen {
             Game.INSTANCE.unpause();
         }));
     }
+
+    @Override
+    public void render(double delta) {
+        super.render(delta);
+    }
 }

@@ -1,5 +1,13 @@
 package net.flamgop;
 
+import imgui.ImGui;
+import imgui.ImGuiIO;
+import imgui.ImGuiViewport;
+import imgui.ImVec2;
+import imgui.flag.*;
+import imgui.gl3.ImGuiImplGl3;
+import imgui.glfw.ImGuiImplGlfw;
+import imgui.type.ImString;
 import net.flamgop.asset.AssetKey;
 import net.flamgop.asset.AssetLoader;
 import net.flamgop.asset.AssetType;
@@ -12,6 +20,7 @@ import net.flamgop.screen.PauseScreen;
 import net.flamgop.screen.Screen;
 import net.flamgop.shadow.ShadowManager;
 import net.flamgop.text.Font;
+import net.flamgop.text.FontAwesomeIcons;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.util.ResourceHelper;
 import net.flamgop.util.Util;
@@ -86,6 +95,8 @@ public class Game {
     private final @Nullable RenderDoc renderDoc;
 
     private final Window window;
+    private final ImGuiImplGlfw imGuiGlfw;
+    private final ImGuiImplGl3 imGuiGl3;
 
     private final VertexArray quad;
     private final ShaderProgram post;
@@ -115,8 +126,8 @@ public class Game {
     private double framerate = 1 / frameTime;
     private double framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
 
-    private final int[] passQueries = new int[6];
-    private final long[] passTimes = new long[6];
+    private final int[] passQueries = new int[7];
+    private final long[] passTimes = new long[7];
 
     private final Camera camera;
     private final FrustumCulling frustumCulling;
@@ -194,6 +205,16 @@ public class Game {
         window.setResizeCallback(this::resize);
 
         window.makeCurrent();
+
+        ImGui.createContext();
+        ImGuiIO io = ImGui.getIO();
+        io.addConfigFlags(ImGuiConfigFlags.DockingEnable);
+        io.addConfigFlags(ImGuiConfigFlags.ViewportsEnable);
+        io.setIniFilename(null);
+
+        imGuiGlfw = new ImGuiImplGlfw();
+        imGuiGlfw.init(window.handle(), true);
+
         GL.createCapabilities();
 
         glEnable(GL_DEBUG_OUTPUT);
@@ -209,6 +230,9 @@ public class Game {
             System.out.println("  Message : " + MemoryUtil.memUTF8(message));
             System.out.println();
         }, 0L);
+
+        imGuiGl3 = new ImGuiImplGl3();
+        imGuiGl3.init("#version 430 core");
 
         GPUTexture.loadMissingTexture();
         GPUTexture.loadBlit();
@@ -619,15 +643,78 @@ public class Game {
             case 3 -> "Forward";
             case 4 -> "Post";
             case 5 -> "UI";
+            case 6 -> "ImGui";
             default -> ""+i;
         };
+    }
+
+    int count = 0;
+    ImString str = new ImString();
+    float[] flt = new float[1];
+    private void renderImGui() {
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 7, "ImGui Pass");
+        glBeginQuery(GL_TIME_ELAPSED, passQueries[6]);
+        imGuiGl3.newFrame();
+        imGuiGlfw.newFrame();
+        ImGui.newFrame();
+
+        ImGuiViewport viewport = ImGui.getMainViewport();
+
+        int flags = ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoNavFocus | ImGuiWindowFlags.NoBackground;
+
+        ImGui.setNextWindowPos(viewport.getPos());
+        ImGui.setNextWindowSize(viewport.getSize());
+        ImGui.setNextWindowViewport(viewport.getID());
+
+        ImGui.pushStyleVar(ImGuiStyleVar.WindowRounding, 0.0f);
+        ImGui.pushStyleVar(ImGuiStyleVar.WindowBorderSize, 0.0f);
+        ImGui.begin("dockspace", null, flags);
+        ImGui.popStyleVar(2);
+
+        int id = ImGui.getID("mydockspace");
+        ImGui.dockSpace(id, new ImVec2(0, 0), ImGuiDockNodeFlags.PassthruCentralNode);
+
+        ImGui.end();
+
+        if (ImGui.begin("Demo", ImGuiWindowFlags.AlwaysAutoResize)) {
+            ImGui.text("OS: [" + System.getProperty("os.name") + "] Arch: [" + System.getProperty("os.arch") + "]");
+            ImGui.text("Hello, World! " + FontAwesomeIcons.Smile);
+            if (ImGui.button(FontAwesomeIcons.Save + " Save")) {
+                count++;
+            }
+            ImGui.sameLine();
+            ImGui.text(String.valueOf(count));
+            ImGui.inputText("string", str, ImGuiInputTextFlags.CallbackResize);
+            ImGui.text("Result: " + str.get());
+            ImGui.sliderFloat("float", flt, 0, 1);
+            ImGui.separator();
+            ImGui.text("Extra");
+        }
+        ImGui.end();
+
+        ImGui.render();
+        imGuiGl3.renderDrawData(ImGui.getDrawData());
+
+        if (ImGui.getIO().hasConfigFlags(ImGuiConfigFlags.ViewportsEnable)) {
+            if (overlayEnabled && renderDoc != null) renderDoc.maskOverlayBits(RenderDoc.OverlayBits.NONE.bits(), RenderDoc.OverlayBits.NONE.bits());
+            final long backupCurrentContext = GLFW.glfwGetCurrentContext();
+            ImGui.updatePlatformWindows();
+            ImGui.renderPlatformWindowsDefault();
+            GLFW.glfwMakeContextCurrent(backupCurrentContext);
+            if (overlayEnabled && renderDoc != null) renderDoc.maskOverlayBits(RenderDoc.OverlayBits.DEFAULT.bits(), RenderDoc.OverlayBits.DEFAULT.bits());
+        }
+
+        glEndQuery(GL_TIME_ELAPSED);
+        glPopDebugGroup();
     }
 
     private void renderUi(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 6, "UI Pass");
         glBeginQuery(GL_TIME_ELAPSED, passQueries[5]);
 
+        glEnable(GL_DEPTH_TEST);
         this.level.scene().renderDebug(this.camera); // this is done here because it renders into the backbuffer, bypassing post-processing.
+        glDisable(GL_DEPTH_TEST);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -649,7 +736,6 @@ public class Game {
         }
 
         glDisable(GL_BLEND);
-
         glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
     }
@@ -673,6 +759,8 @@ public class Game {
         renderPost(delta);
 
         renderUi(delta);
+
+        renderImGui();
 
         glPopDebugGroup();
     }

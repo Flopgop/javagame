@@ -43,6 +43,10 @@ public class Window {
         GLFW.glfwSetCursorPosCallback(handle, (_, x, y) -> this.handleMouseMove(x,y));
     }
 
+    public long handle() {
+        return handle;
+    }
+
     public Matrix4f ortho() {
         return new Matrix4f().identity().ortho(0, width, 0, height, 0, 1);
     }
