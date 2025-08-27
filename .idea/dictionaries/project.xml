@@ -7,6 +7,7 @@
       <w>joml</w>
       <w>mousebind</w>
       <w>mousebinds</w>
+      <w>nunito</w>
       <w>ortho</w>
       <w>quaternionf</w>
       <w>renderbuffers</w>
@@ -14,6 +15,7 @@
       <w>rmluicore</w>
       <w>shadowmap</w>
       <w>ssbo</w>
+      <w>texcoord</w>
       <w>tonemap</w>
       <w>valvesoftware</w>
     </words>

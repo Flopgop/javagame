@@ -99,7 +99,7 @@ public class Game {
     private final ImGuiImplGl3 imGuiGl3;
 
     private final VertexArray quad;
-    private final ShaderProgram post;
+    private ShaderProgram post;
     private final GPUFramebuffer finalFramebuffer;
     private GPUTexture imgTexture;
     private GPUTexture imgDepthTexture;
@@ -140,6 +140,7 @@ public class Game {
     private final Level level;
 
     private final ShadowManager shadowManager;
+    private final AssetLoader assetLoader;
 
     private final Screen pauseScreen;
     private @Nullable Screen currentScreen;
@@ -231,6 +232,7 @@ public class Game {
             System.out.println();
         }, 0L);
 
+
         imGuiGl3 = new ImGuiImplGl3();
         imGuiGl3.init("#version 430 core");
 
@@ -240,7 +242,7 @@ public class Game {
         Material.loadMissingMaterial();
         shadowManager = new ShadowManager();
 
-        AssetLoader assetLoader = new AssetLoader("./assets/");
+        this.assetLoader = new AssetLoader("./assets/");
 
         glCreateQueries(GL_TIME_ELAPSED, passQueries);
 
@@ -273,9 +275,14 @@ public class Game {
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_diffuse"), 0);
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_roughness"), 1);
         glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_metallic"), 2);
+        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_normal"), 3);
 
         glProgramUniform1i(post.handle(), post.getUniformLocation("img_texture"), 0);
         glProgramUniform1i(post.handle(), post.getUniformLocation("depth_texture"), 1);
+        glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_position"), 2);
+        glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_normal"), 3);
+        glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_material"), 4);
+        glProgramUniform1i(post.handle(), post.getUniformLocation("blue_noise"), 5);
 
         textRenderer = new TextRenderer(window.width(), window.height());
 
@@ -402,11 +409,13 @@ public class Game {
         font.writeAtlasToDisk(new File("font.png"));
 
         this.player = new Player(physics, level.scene(), camera, window.inputState());
-        window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
     }
 
     private void start() {
+        window.setCursorMode(GLFW.GLFW_CURSOR_DISABLED);
         window.show();
+        window.focusWindow();
+        window.requestAttention();
 
         while (!this.shouldClose()) {
             double time = GLFW.glfwGetTime();
@@ -491,6 +500,35 @@ public class Game {
                 overlayEnabled = true;
                 renderDoc.maskOverlayBits(RenderDoc.OverlayBits.DEFAULT.bits(), RenderDoc.OverlayBits.DEFAULT.bits());
             }
+        }
+
+        if (window.inputState().wasKeyPressed(GLFW.GLFW_KEY_P)) {
+            post.destroy();
+            try {
+                post = new ShaderProgram();
+                post.attachShaderSource("Post Vertex Shader", assetLoader.loadAsString(new AssetKey(AssetType.FILE, "shaders/post.vertex.glsl")), GL_VERTEX_SHADER);
+                post.attachShaderSource("Post Fragment Shader", assetLoader.loadAsString(new AssetKey(AssetType.FILE, "shaders/post.fragment.glsl")), GL_FRAGMENT_SHADER);
+                post.link();
+                post.label("Post Program");
+            } catch (FileNotFoundException e) {
+                post.destroy();
+                try {
+                    System.out.println("WARNING: failed to reload post shader from assets (doesn't exist?). Using fallback.");
+                    post = new ShaderProgram();
+                    post.attachShaderSource("Post Vertex Shader", assetLoader. loadAsString(new AssetKey(AssetType.RESOURCE, "shaders/post.vertex.glsl")), GL_VERTEX_SHADER);
+                    post.attachShaderSource("Post Fragment Shader", assetLoader.loadAsString(new AssetKey(AssetType.RESOURCE, "shaders/post.fragment.glsl")), GL_FRAGMENT_SHADER);
+                    post.link();
+                    post.label("Post Program");
+                } catch (FileNotFoundException ne) {
+                    throw new RuntimeException(ne);
+                }
+            }
+            glProgramUniform1i(post.handle(), post.getUniformLocation("img_texture"), 0);
+            glProgramUniform1i(post.handle(), post.getUniformLocation("depth_texture"), 1);
+            glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_position"), 2);
+            glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_normal"), 3);
+            glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_material"), 4);
+            glProgramUniform1i(post.handle(), post.getUniformLocation("blue_noise"), 5);
         }
 
         if (!paused) {
@@ -627,7 +665,14 @@ public class Game {
         post.use();
         glBindTextureUnit(0, imgTexture.handle());
         glBindTextureUnit(1, imgDepthTexture.handle());
+        glBindTextureUnit(2, gBufferPositionTexture.handle());
+        glBindTextureUnit(3, gBufferNormalTexture.handle());
+        glBindTextureUnit(4, gBufferMaterialTexture.handle());
+        glBindTextureUnit(5, shadowBlueNoiseTexture.handle());
         glProgramUniform1i(post.handle(), post.getUniformLocation("tonemap_mode"), tonemapMode);
+        glProgramUniform2i(post.handle(), post.getUniformLocation("screen_size"), this.window.width(), this.window.height());
+        glProgramUniform1f(post.handle(), post.getUniformLocation("z_near"), this.camera.near());
+        glProgramUniform1f(post.handle(), post.getUniformLocation("z_far"), this.camera.far());
         quad.draw();
         finalFramebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
 

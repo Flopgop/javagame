@@ -43,6 +43,14 @@ public class Window {
         GLFW.glfwSetCursorPosCallback(handle, (_, x, y) -> this.handleMouseMove(x,y));
     }
 
+    public void focusWindow() {
+        GLFW.glfwFocusWindow(handle);
+    }
+
+    public void requestAttention() {
+        GLFW.glfwRequestWindowAttention(handle);
+    }
+
     public long handle() {
         return handle;
     }

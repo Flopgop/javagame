@@ -273,6 +273,8 @@ void main() {
     vec3 sunDir = -normalize(pbr_in.light_direction);
 
     float shadow = shadow_factor(position);
+    float levels = 4.0;
+    shadow = floor(shadow * levels) / levels;
     lighting += shadow * calculate_sun_contribution(sunDir, sunColor, color, position, V, N, F0, roughness, metallic);
 
     // calculate reflected light because of the sky rendering here

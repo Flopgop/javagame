@@ -87,10 +87,13 @@ public class GPUTexture {
     }
 
     public static GPUTexture MISSING_TEXTURE;
+    public static GPUTexture MISSING_NORMAL;
 
     public static void loadMissingTexture() {
         MISSING_TEXTURE = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("missing.png"));
         MISSING_TEXTURE.label("Missing Texture");
+        MISSING_NORMAL = GPUTexture.loadFromBytes(ResourceHelper.loadFileFromResource("missing_normal.png"));
+        MISSING_NORMAL.label("Missing Normal");
     }
 
 

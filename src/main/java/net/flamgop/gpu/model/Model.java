@@ -6,29 +6,40 @@ import net.flamgop.asset.AssetLoader;
 import net.flamgop.asset.AssetType;
 import net.flamgop.gpu.DefaultShaders;
 import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.Vertex;
 import net.flamgop.gpu.VertexArray;
 import net.flamgop.util.AABB;
-import net.flamgop.util.Util;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.assimp.*;
-import org.lwjgl.opengl.GL46;
 
 import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.lwjgl.opengl.GL46.*;
+
 @SuppressWarnings("DataFlowIssue")
 public class Model {
+
+    private static final int IMPORT_FLAGS =
+            Assimp.aiProcess_Triangulate |
+            Assimp.aiProcess_FlipUVs |
+            Assimp.aiProcess_CalcTangentSpace |
+            Assimp.aiProcess_JoinIdenticalVertices |
+            Assimp.aiProcess_GenSmoothNormals |
+            Assimp.aiProcess_ImproveCacheLocality |
+            Assimp.aiProcess_FixInfacingNormals |
+            Assimp.aiProcess_FindDegenerates;
 
     public final List<TexturedMesh> meshes = new ArrayList<>();
 
     @SuppressWarnings("DataFlowIssue")
     public void load(AssetLoader assetLoader, String identifier) throws FileNotFoundException {
         System.out.println("Loading model: " + identifier);
-        AIScene scene = Assimp.aiImportFileFromMemory(assetLoader.load(AssetKey.fromString(identifier)), Assimp.aiProcess_Triangulate | Assimp.aiProcess_FlipUVs, (ByteBuffer) null);
+        AIScene scene = Assimp.aiImportFileFromMemory(assetLoader.load(AssetKey.fromString(identifier)), IMPORT_FLAGS, (ByteBuffer) null);
         if (scene == null || (scene.mFlags() & Assimp.AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene.mRootNode() == null) {
             throw new IllegalStateException("Failed to load model");
         }
@@ -48,28 +59,32 @@ public class Model {
     }
 
     private TexturedMesh processMesh(AssetLoader assetLoader, AIMesh mesh, AIScene scene) {
-        List<Float> vertices = new ArrayList<>();
+        List<Vertex> vertices = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
 
         float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE, minZ = Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
 
         for (int i = 0; i < mesh.mNumVertices(); i++) {
+            Vertex v = new Vertex();
             AIVector3D vertex = mesh.mVertices().get(i);
-            vertices.add(vertex.x());
-            vertices.add(vertex.y());
-            vertices.add(vertex.z());
+            v.position(vertex.x(), vertex.y(), vertex.z());
             AIVector3D normal = mesh.mNormals().get(i);
-            vertices.add(normal.x());
-            vertices.add(normal.y());
-            vertices.add(normal.z());
+            v.normal(normal.x(), normal.y(), normal.z());
             if (mesh.mTextureCoords(0) != null) {
                 AIVector3D texcoord = mesh.mTextureCoords(0).get(i);
-                vertices.add(texcoord.x());
-                vertices.add(texcoord.y());
-            } else {
-                vertices.add(0f);
-                vertices.add(0f);
+                v.texcoord(texcoord.x(), texcoord.y());
             }
+            AIVector3D tangent = mesh.mTangents().get(i);
+            AIVector3D bitangent = mesh.mBitangents().get(i);
+
+            Vector3f n = new Vector3f(normal.x(), normal.y(), normal.z());
+            Vector3f t = new Vector3f(tangent.x(), tangent.y(), tangent.z());
+            Vector3f b = new Vector3f(bitangent.x(), bitangent.y(), bitangent.z());
+
+            float w = (t.cross(b).dot(n) > 0.0f ? 1.0f : -1.0f);
+
+            v.tangent(tangent.x(), tangent.y(), tangent.z(), (int)w);
+            vertices.add(v);
 
             if (vertex.x() < minX) minX = vertex.x();
             if (vertex.x() > maxX) maxX = vertex.x();
@@ -88,7 +103,7 @@ public class Model {
         }
 
         VertexArray vao = VertexArray.withDefaultVertexFormat(
-                Util.doubleToFloatArray(vertices.stream().mapToDouble(f -> f).toArray()),
+                vertices.toArray(new Vertex[0]),
                 indices.stream().mapToInt(i -> i).toArray()
         );
 
@@ -101,6 +116,7 @@ public class Model {
         GPUTexture diffuse = null;
         GPUTexture roughness = null;
         GPUTexture metallic = null;
+        GPUTexture normal = null;
 
         if (mesh.mMaterialIndex() >= 0) {
             AIMaterial aiMaterial = AIMaterial.create(scene.mMaterials().get(mesh.mMaterialIndex()));
@@ -109,21 +125,33 @@ public class Model {
             if (diffuse == null) diffuse = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_DIFFUSE);
             roughness = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_DIFFUSE_ROUGHNESS);
             metallic = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_METALNESS);
+            normal = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_NORMALS);
+            if (normal == null) normal = loadTexture(assetLoader, scene, aiMaterial, Assimp.aiTextureType_NORMAL_CAMERA);
         }
 
+        float maxAniso = glGetFloat(GL_MAX_TEXTURE_MAX_ANISOTROPY);
         if (roughness != null) {
-            GL46.glTextureParameteri(roughness.handle(), GL46.GL_TEXTURE_MIN_FILTER, GL46.GL_LINEAR);
-            GL46.glTextureParameteri(roughness.handle(), GL46.GL_TEXTURE_MAG_FILTER, GL46.GL_LINEAR);
+            glTextureParameteri(roughness.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(roughness.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(metallic.handle(), GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
+
         }
         if (metallic != null) {
-            GL46.glTextureParameteri(metallic.handle(), GL46.GL_TEXTURE_MIN_FILTER, GL46.GL_LINEAR);
-            GL46.glTextureParameteri(metallic.handle(), GL46.GL_TEXTURE_MAG_FILTER, GL46.GL_LINEAR);
+            glTextureParameteri(metallic.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(metallic.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(metallic.handle(), GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
+        }
+        if (normal != null) {
+            glTextureParameteri(metallic.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(metallic.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(metallic.handle(), GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
         }
 
         material = new Material(DefaultShaders.GBUFFER,
                 diffuse != null ? diffuse : GPUTexture.MISSING_TEXTURE,
                 roughness != null ? roughness : GPUTexture.MISSING_TEXTURE,
-                metallic != null ? metallic : GPUTexture.MISSING_TEXTURE
+                metallic != null ? metallic : GPUTexture.MISSING_TEXTURE,
+                normal != null ? normal : GPUTexture.MISSING_NORMAL
                 );
 
         return new TexturedMesh(vao, material, aabb, aabb.center(), aabb.radius());

@@ -1,11 +1,9 @@
 package net.flamgop.gpu;
 
 import net.flamgop.gpu.buffer.GPUBuffer;
-import org.jetbrains.annotations.NotNull;
 import org.lwjgl.system.MemoryUtil;
-import org.lwjgl.util.par.ParShapes;
-import org.lwjgl.util.par.ParShapesMesh;
 
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
@@ -19,73 +17,13 @@ public class VertexArray {
     private GPUBuffer elementBuffer;
     private int indexCount = 0;
 
-    public static VertexArray fromParShapesMesh(@NotNull ParShapesMesh mesh) {
-        ParShapes.par_shapes_compute_normals(mesh);
-
-        FloatBuffer points = mesh.points(mesh.npoints() * 3);
-        FloatBuffer normals = mesh.normals(mesh.npoints() * 3);
-        FloatBuffer uvs = mesh.tcoords(mesh.npoints() * 2);
-        IntBuffer tris = mesh.triangles(mesh.ntriangles() * 3);
-
-        boolean hasUVs = (uvs != null && uvs.capacity() >= mesh.npoints() * 2);
-
-        float[] vertData = new float[mesh.npoints() * 8];
-        for (int i = 0; i < mesh.npoints(); i++) {
-            int pi  = i * 3;
-            int ui  = i * 2;
-            int vi  = i * 8;
-
-            vertData[vi    ] = points.get(pi);
-            vertData[vi + 1] = points.get(pi + 1);
-            vertData[vi + 2] = points.get(pi + 2);
-
-            vertData[vi + 3] = normals.get(pi);
-            vertData[vi + 4] = normals.get(pi + 1);
-            vertData[vi + 5] = normals.get(pi + 2);
-
-            if (hasUVs) {
-                vertData[vi + 6] = uvs.get(ui);
-                vertData[vi + 7] = uvs.get(ui + 1);
-            } else {
-                // Default fallback UVs to (0, 0)
-                vertData[vi + 6] = 0.0f;
-                vertData[vi + 7] = 0.0f;
-            }
-        }
-
-        if (!hasUVs) {
-            for (int i = 0; i < mesh.ntriangles(); i += 2) {
-                if (i + 1 >= mesh.ntriangles()) break;
-
-                int i0 = tris.get(i * 3);
-                int i1 = tris.get(i * 3 + 1);
-                int i2 = tris.get(i * 3 + 2);
-
-                int i3 = tris.get((i + 1) * 3 + 1); // typical for quad from triangles
-
-                // Assign UVs to the quad's four corners
-                vertData[i0 * 8 + 6] = 0.0f; vertData[i0 * 8 + 7] = 0.0f;
-                vertData[i1 * 8 + 6] = 1.0f; vertData[i1 * 8 + 7] = 0.0f;
-                vertData[i2 * 8 + 6] = 1.0f; vertData[i2 * 8 + 7] = 1.0f;
-                vertData[i3 * 8 + 6] = 0.0f; vertData[i3 * 8 + 7] = 1.0f;
-            }
-        }
-
-        // Extract triangle indices
-        int[] indexData = new int[3 * mesh.ntriangles()];
-        for (int i = 0; i < 3 * mesh.ntriangles(); i++) {
-            indexData[i] = tris.get(i);
-        }
-
-        return withDefaultVertexFormat(vertData, indexData);
-    }
-
-    public static VertexArray withDefaultVertexFormat(float[] vertexData, int[] indexData) {
+    public static VertexArray withDefaultVertexFormat(Vertex[] vertexData, int[] indexData) {
         VertexArray buffer = new VertexArray();
-        buffer.data(vertexData, 8 * Float.BYTES, indexData);
-        buffer.attribute(0, 3, GL_FLOAT, false, 0);
-        buffer.attribute(1, 3, GL_FLOAT, false, 3 * Float.BYTES);
-        buffer.attribute(2, 2, GL_FLOAT, false, 6 * Float.BYTES);
+        buffer.data(vertexData, indexData);
+        buffer.attribute(0, 3, GL_FLOAT, false, 0); // position
+        buffer.attribute(1, 2, GL_FLOAT, false, 3 * Float.BYTES); // uv
+        buffer.attribute(2, 4, GL_INT_2_10_10_10_REV, true, 5 * Float.BYTES); // normal
+        buffer.attribute(3, 4, GL_INT_2_10_10_10_REV, true, 5 * Float.BYTES + Integer.BYTES); // tangent
         return buffer;
     }
 
@@ -110,6 +48,29 @@ public class VertexArray {
 
     public int indexCount() {
         return indexCount;
+    }
+
+    private void data(Vertex[] vertexData, int[] indexData) {
+        ByteBuffer vertices = MemoryUtil.memAlloc(vertexData.length * Vertex.BYTES);
+        for (Vertex vertex : vertexData) {
+            vertex.get(vertices);
+        }
+        vertices.flip();
+        IntBuffer indices = MemoryUtil.memAllocInt(indexData.length * Integer.BYTES);
+        indices.put(indexData).flip();
+
+        GPUBuffer vbo = new GPUBuffer(GPUBuffer.BufferUsage.STATIC_DRAW);
+        GPUBuffer ebo = new GPUBuffer(GPUBuffer.BufferUsage.STATIC_DRAW);
+        vbo.allocate(vertices);
+        ebo.allocate(indices);
+
+        buffer(vbo, 0, 0, Vertex.BYTES);
+        elementBuffer(ebo);
+
+        this.indexCount(indexData.length);
+
+        MemoryUtil.memFree(vertices);
+        MemoryUtil.memFree(indices);
     }
 
     public void data(float[] vertexData, int vertexStride, int[] indexData) {

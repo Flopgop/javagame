@@ -37,8 +37,19 @@ public class AssetLoader {
         };
     }
 
+    public String loadAsString(AssetKey key) throws FileNotFoundException {
+        return switch (key.type()) {
+            case RESOURCE -> loadStringFromResource(key.path());
+            case FILE -> loadStringFromAsset(key.path());
+        };
+    }
+
     private ByteBuffer loadFromResource(String path) {
         return ResourceHelper.loadFileFromResource(path);
+    }
+
+    private String loadStringFromResource(String path) {
+        return ResourceHelper.loadFileContentsFromResource(path);
     }
 
     private ByteBuffer loadFromAsset(String path) throws FileNotFoundException {
@@ -51,6 +62,19 @@ public class AssetLoader {
             ByteBuffer buf = MemoryUtil.memAlloc(bytes.length);
             buf.put(0, bytes);
             return buf;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String loadStringFromAsset(String path) throws FileNotFoundException {
+        File file = new File(assetPath + path);
+        if (!file.exists()) {
+            throw new FileNotFoundException();
+        }
+        try (InputStream is = new FileInputStream(file)) {
+            byte[] bytes = is.readAllBytes();
+            return new String(bytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
