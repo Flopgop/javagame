@@ -105,6 +105,10 @@ public class StaticMesh {
         }
     }
 
+    public Model model() {
+        return model;
+    }
+
     public void addToScene(PhysicsScene scene) {
         scene.addActor(actor);
     }

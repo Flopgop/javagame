@@ -14,6 +14,7 @@ import net.flamgop.gpu.*;
 import net.flamgop.gpu.model.Material;
 import net.flamgop.level.Level;
 import net.flamgop.level.LevelLoader;
+import net.flamgop.math.Noise;
 import net.flamgop.physics.Physics;
 import net.flamgop.screen.PauseScreen;
 import net.flamgop.screen.Screen;
@@ -34,6 +35,8 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryUtil;
 import org.renderdoc.api.RenderDoc;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;

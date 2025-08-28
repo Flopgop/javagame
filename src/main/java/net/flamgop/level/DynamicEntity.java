@@ -98,6 +98,10 @@ public class DynamicEntity {
         this.modelUniformBuffer.buffer().label(identifier + " Model UBO");
     }
 
+    public Model model() {
+        return model;
+    }
+
     public void addToScene(PhysicsScene scene) {
         scene.addActor(this.actor);
     }

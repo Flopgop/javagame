@@ -1,11 +1,14 @@
 package net.flamgop.shadow;
 
+import net.flamgop.Game;
 import net.flamgop.gpu.Camera;
 import net.flamgop.util.AABB;
 import net.flamgop.util.FrustumPlane;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
+
+import java.util.List;
 
 public class CascadedShadowMaps {
     public static float[] computeCascadeSplits(int cascadeCount, float near, float far, float lambda) {
@@ -42,9 +45,20 @@ public class CascadedShadowMaps {
         invCamViewProj.frustumAabb(min, max);
         Vector2f nearFar = ShadowUtil.computeNearAndFar(lightView, orthoMin, orthoMax, new AABB(min, max));
 
+        float lightNear = nearFar.x;
+        Vector3f tmp = new Vector3f();
+        List<AABB> aabbs = Game.INSTANCE.level().getAllObjectBounds();
+        for (AABB aabb : aabbs) {
+            Vector3f[] corners = aabb.getCorners();
+            for (Vector3f corner : corners) {
+                tmp.set(corner).mulPosition(lightView);
+                lightNear = Math.min(lightNear, tmp.z);
+            }
+        }
+
         snapOrthoToTexels(orthoMin, orthoMax, resolution);
 
-        Matrix4f ortho = new Matrix4f().ortho(orthoMin.x, orthoMax.x, orthoMin.y, orthoMax.y, nearFar.x, nearFar.y);
+        Matrix4f ortho = new Matrix4f().ortho(orthoMin.x, orthoMax.x, orthoMin.y, orthoMax.y, lightNear, nearFar.y);
         return new Matrix4f(ortho).mul(lightView);
     }
 

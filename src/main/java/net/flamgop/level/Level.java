@@ -13,6 +13,7 @@ import net.flamgop.level.json.JsonStaticMesh;
 import net.flamgop.physics.Physics;
 import net.flamgop.physics.PhysicsScene;
 import net.flamgop.shadow.DirectionalLight;
+import net.flamgop.util.AABB;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import physx.common.PxVec3;
@@ -128,5 +129,18 @@ public class Level {
         for (DynamicEntity entity : dynamicEntities) {
             entity.render(delta);
         }
+    }
+
+    public List<AABB> getAllObjectBounds() {
+        List<AABB> aabbs = new ArrayList<>();
+        for (DynamicEntity entity : dynamicEntities) {
+            if (entity.model() != null)
+                entity.model().meshes.forEach(tm -> aabbs.add(tm.aabb()));
+        }
+        for (StaticMesh mesh : staticMeshes) {
+            if (mesh.model() != null)
+                mesh.model().meshes.forEach(tm -> aabbs.add(tm.aabb()));
+        }
+        return aabbs;
     }
 }
