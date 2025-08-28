@@ -54,4 +54,9 @@ public class TexturedMesh {
         else materialOverride.use();
         this.vao.draw();
     }
+
+    public void destroy() {
+        this.vao.destroy();
+        // we don't manage our material.
+    }
 }

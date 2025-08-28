@@ -1,9 +1,7 @@
 package net.flamgop.screen;
 
 import net.flamgop.Game;
-import net.flamgop.asset.AssetKey;
-import net.flamgop.asset.AssetLoader;
-import net.flamgop.asset.AssetType;
+import net.flamgop.asset.*;
 import net.flamgop.gpu.GPUTexture;
 import net.flamgop.gpu.Window;
 import net.flamgop.screen.widget.TexturedWidget;
@@ -14,12 +12,12 @@ import java.io.FileNotFoundException;
 
 public class PauseScreen extends Screen {
 
-    private static final AssetKey RESUME_BUTTON_TEXTURE = new AssetKey(AssetType.RESOURCE, "cocount.jpg");
+    private static final AssetIdentifier RESUME_BUTTON_TEXTURE = new AssetIdentifier("cocount.jpg");
 
-    public PauseScreen(Window window, AssetLoader assetLoader) throws FileNotFoundException {
+    public PauseScreen(Window window, AssetManager assetManager) throws FileNotFoundException {
         super(window);
 
-        this.addWidget(new TexturedWidget(GPUTexture.loadFromBytes(assetLoader.load(RESUME_BUTTON_TEXTURE)), window, new Vector2f(0.5f, 0.5f), new Vector2i(128, 32), () -> {
+        this.addWidget(new TexturedWidget(assetManager.loadSync(RESUME_BUTTON_TEXTURE, GPUTexture.class).get(), window, new Vector2f(0.5f, 0.5f), new Vector2i(128, 32), () -> {
             Game.INSTANCE.unpause();
         }));
     }

@@ -1,7 +1,7 @@
 package net.flamgop.level;
 
-import net.flamgop.asset.AssetKey;
-import net.flamgop.asset.AssetLoader;
+import net.flamgop.asset.AssetIdentifier;
+import net.flamgop.asset.AssetManager;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.model.Model;
@@ -20,13 +20,13 @@ import physx.geometry.PxTriangleMesh;
 import physx.geometry.PxTriangleMeshGeometry;
 import physx.physics.*;
 
-import java.io.FileNotFoundException;
+import java.nio.ByteBuffer;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class StaticMesh {
-    public static StaticMesh fromJson(AssetLoader assetLoader, Physics physics, JsonStaticMesh entity) {
+    public static StaticMesh fromJson(AssetManager assetManager, Physics physics, JsonStaticMesh entity) {
         return new StaticMesh(
-                assetLoader,
+                assetManager,
                 physics,
                 entity.identifier,
                 entity.modelIdentifier,
@@ -50,7 +50,7 @@ public class StaticMesh {
     private final UniformBuffer modelUniformBuffer;
 
     public StaticMesh(
-            AssetLoader assetLoader,
+            AssetManager assetManager,
             Physics physics,
             String identifier,
             String modelIdentifier,
@@ -61,11 +61,7 @@ public class StaticMesh {
             int collidesWithFlag,
             int collisionGroup
     ) {
-        try {
-            this.collisionMesh = physics.loadMesh(assetLoader.load(AssetKey.fromString(collisionModelIdentifier)));
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+        this.collisionMesh = physics.loadMesh(assetManager.loadSync(new AssetIdentifier(collisionModelIdentifier), ByteBuffer.class).get());
         collisionMeshGeometry = new PxTriangleMeshGeometry(collisionMesh);
         PxShapeFlags shapeFlags = new PxShapeFlags((byte)  (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value | PxShapeFlagEnum.eVISUALIZATION.value));
         PxTransform transform = new PxTransform(PxIDENTITYEnum.PxIdentity);
@@ -87,12 +83,7 @@ public class StaticMesh {
 
         if (modelIdentifier != null) {
             this.hasModel = true;
-            this.model = new Model();
-            try {
-                this.model.load(assetLoader, modelIdentifier);
-            } catch (FileNotFoundException e) {
-                throw new RuntimeException(e);
-            }
+            this.model = assetManager.loadSync(new AssetIdentifier(modelIdentifier), Model.class).get();
             this.modelUniformData = new ModelUniformData();
             this.modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
             this.modelUniformBuffer.allocate(this.modelUniformData);

@@ -7,20 +7,18 @@ import imgui.ImVec2;
 import imgui.flag.*;
 import imgui.gl3.ImGuiImplGl3;
 import imgui.glfw.ImGuiImplGlfw;
-import net.flamgop.asset.AssetKey;
-import net.flamgop.asset.AssetLoader;
-import net.flamgop.asset.AssetType;
+import net.flamgop.asset.*;
+import net.flamgop.asset.loaders.*;
 import net.flamgop.gpu.*;
 import net.flamgop.gpu.model.Material;
+import net.flamgop.gpu.model.Model;
 import net.flamgop.level.Level;
 import net.flamgop.level.LevelLoader;
-import net.flamgop.math.Noise;
 import net.flamgop.physics.Physics;
 import net.flamgop.screen.PauseScreen;
 import net.flamgop.screen.Screen;
 import net.flamgop.shadow.ShadowManager;
 import net.flamgop.sound.Sound;
-import net.flamgop.sound.SoundLoader;
 import net.flamgop.sound.SoundManager;
 import net.flamgop.sound.SoundSource;
 import net.flamgop.text.Font;
@@ -35,11 +33,10 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryUtil;
 import org.renderdoc.api.RenderDoc;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.Map;
 
@@ -117,8 +114,9 @@ public class Game {
     private GPUTexture gBufferMaterialTexture;
     private GPUTexture gBufferDepthTexture;
 
+    private final ShadowManager shadowManager;
     private final GPUTexture shadowBlueNoiseTexture;
-    private final int shadowResolution = 4096;
+    private final int shadowResolution = 2048;
 
     private final TextRenderer textRenderer;
     private final Font font;
@@ -142,8 +140,8 @@ public class Game {
 
     private final Level level;
 
-    private final ShadowManager shadowManager;
-    private final AssetLoader assetLoader;
+//    private final AssetLoader assetLoader;
+    private final AssetManager assetManager;
 
     private final SoundManager soundManager;
     private final SoundSource soundSource;
@@ -184,7 +182,7 @@ public class Game {
         else unpause();
     }
 
-    public Game(@Nullable RenderDoc renderDoc, boolean physicsDebug) throws FileNotFoundException {
+    public Game(@Nullable RenderDoc renderDoc, boolean physicsDebug) {
         INSTANCE = this;
         this.renderDoc = renderDoc;
 
@@ -248,12 +246,18 @@ public class Game {
         DefaultShaders.loadDefaultShaders();
         Material.loadMissingMaterial();
 
-        this.assetLoader = new AssetLoader("./assets/");
+//        this.assetLoader = new AssetLoader("./assets/");
+        this.assetManager = new AssetManager();
+        this.assetManager.registerLoader(Model.class, new ModelLoader(assetManager));
+        this.assetManager.registerLoader(ByteBuffer.class, new RawLoader());
+        this.assetManager.registerLoader(GPUTexture.class, new TextureLoader());
+        this.assetManager.registerLoader(String.class, new StringLoader());
+        this.assetManager.registerLoader(Sound.class, new SoundLoader());
 
         glCreateQueries(GL_TIME_ELAPSED, passQueries);
 
         try {
-            pauseScreen = new PauseScreen(window, assetLoader);
+            pauseScreen = new PauseScreen(window, assetManager);
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -368,15 +372,11 @@ public class Game {
         });
         gFramebuffer.label("GBuffer");
 
-        try {
-            shadowBlueNoiseTexture = GPUTexture.loadFromBytes(assetLoader.load(new AssetKey(AssetType.RESOURCE, "bluenoise.png")));
-            glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_T, GL_REPEAT);
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+        shadowBlueNoiseTexture = assetManager.loadSync(new AssetIdentifier("bluenoise.png"), GPUTexture.class).get();
+        glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-        LevelLoader loader = new LevelLoader(assetLoader);
+        LevelLoader loader = new LevelLoader(assetManager);
         this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
 
         if (physicsDebug) {
@@ -403,7 +403,7 @@ public class Game {
         this.player = new Player(physics, level.scene(), camera, window.inputState());
         this.soundManager = new SoundManager(player);
         this.soundSource = new SoundSource();
-        this.sound = SoundLoader.loadWav(assetLoader.load(new AssetKey(AssetType.RESOURCE, "sound.wav")));
+        this.sound = assetManager.loadSync(new AssetIdentifier("sound.wav"), Sound.class).get();
         if (!sound.valid()) throw new RuntimeException("Sound isn't valid!");
     }
 
@@ -505,25 +505,14 @@ public class Game {
 
         if (window.inputState().wasKeyPressed(GLFW.GLFW_KEY_P)) {
             post.destroy();
-            try {
-                post = new ShaderProgram();
-                post.attachShaderSource("Post Vertex Shader", assetLoader.loadAsString(new AssetKey(AssetType.FILE, "shaders/post.vertex.glsl")), GL_VERTEX_SHADER);
-                post.attachShaderSource("Post Fragment Shader", assetLoader.loadAsString(new AssetKey(AssetType.FILE, "shaders/post.fragment.glsl")), GL_FRAGMENT_SHADER);
-                post.link();
-                post.label("Post Program");
-            } catch (FileNotFoundException e) {
-                post.destroy();
-                try {
-                    System.out.println("WARNING: failed to reload post shader from assets (doesn't exist?). Using fallback.");
-                    post = new ShaderProgram();
-                    post.attachShaderSource("Post Vertex Shader", assetLoader. loadAsString(new AssetKey(AssetType.RESOURCE, "shaders/post.vertex.glsl")), GL_VERTEX_SHADER);
-                    post.attachShaderSource("Post Fragment Shader", assetLoader.loadAsString(new AssetKey(AssetType.RESOURCE, "shaders/post.fragment.glsl")), GL_FRAGMENT_SHADER);
-                    post.link();
-                    post.label("Post Program");
-                } catch (FileNotFoundException ne) {
-                    throw new RuntimeException(ne);
-                }
-            }
+            assetManager.unload(new AssetIdentifier("shaders/post.vertex.glsl"), String.class);
+            assetManager.unload(new AssetIdentifier("shaders/post.fragment.glsl"), String.class);
+            post = new ShaderProgram();
+            post.attachShaderSource("Post Vertex Shader", assetManager.loadSync(new AssetIdentifier("shaders/post.vertex.glsl"), String.class).get(), GL_VERTEX_SHADER);
+            post.attachShaderSource("Post Fragment Shader", assetManager.loadSync(new AssetIdentifier("shaders/post.fragment.glsl"), String.class).get(), GL_FRAGMENT_SHADER);
+            post.link();
+            post.label("Post Program");
+
             glProgramUniform1i(post.handle(), post.getUniformLocation("img_texture"), 0);
             glProgramUniform1i(post.handle(), post.getUniformLocation("depth_texture"), 1);
             glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_position"), 2);

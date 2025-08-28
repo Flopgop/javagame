@@ -4,7 +4,7 @@ import de.marhali.json5.Json5;
 import de.marhali.json5.Json5Array;
 import de.marhali.json5.Json5Element;
 import de.marhali.json5.Json5Object;
-import net.flamgop.asset.AssetLoader;
+import net.flamgop.asset.AssetManager;
 import net.flamgop.level.json.JsonDynamicEntity;
 import net.flamgop.level.json.JsonLight;
 import net.flamgop.level.json.JsonStaticMesh;
@@ -15,10 +15,10 @@ public class LevelLoader {
 
     private final Json5 json5 = Json5.builder(options ->
             options.allowInvalidSurrogate().trailingComma().prettyPrinting().build());
-    private final AssetLoader assetLoader;
+    private final AssetManager assetManager;
 
-    public LevelLoader(AssetLoader assetLoader) {
-        this.assetLoader = assetLoader;
+    public LevelLoader(AssetManager assetManager) {
+        this.assetManager = assetManager;
     }
 
     public Level load(Physics physics, String json) {
@@ -46,7 +46,7 @@ public class LevelLoader {
                 staticMesh.collisionModelIdentifier = mesh.get("collision").getAsString();
                 staticMesh.collidesWithFlag = mesh.get("collides_with_flag").getAsInt();
                 staticMesh.collisionGroup = mesh.get("collision_group").getAsInt();
-                level.staticMesh(assetLoader, staticMesh);
+                level.staticMesh(assetManager, staticMesh);
             }
         }
         if (dynamics != null) {
@@ -61,7 +61,7 @@ public class LevelLoader {
                 dynamicEntity.mass = entity.get("mass").getAsFloat();
                 dynamicEntity.collidesWithFlag = entity.get("collides_with_flag").getAsInt();
                 dynamicEntity.collisionGroup = entity.get("collision_group").getAsInt();
-                level.dynamicEntity(assetLoader, dynamicEntity);
+                level.dynamicEntity(assetManager, dynamicEntity);
             }
         }
         if (lights != null) {

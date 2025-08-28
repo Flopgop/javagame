@@ -1,5 +1,9 @@
-package net.flamgop.sound;
+package net.flamgop.asset.loaders;
 
+import net.flamgop.asset.AssetIdentifier;
+import net.flamgop.asset.Loader;
+import net.flamgop.sound.Sound;
+import net.flamgop.util.ResourceHelper;
 import org.lwjgl.stb.STBVorbis;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -10,7 +14,7 @@ import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
 
-public class SoundLoader {
+public class SoundLoader implements Loader<Sound> {
 
     public static int asciiToInt(String s, boolean bigEndian) {
         if (s.length() != 4) {
@@ -99,7 +103,7 @@ public class SoundLoader {
     }
 
     // *.ogg
-    public static Sound loadOGG(ByteBuffer bytes) {
+    public static Sound loadOgg(ByteBuffer bytes) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer pChannels = stack.mallocInt(1);
             IntBuffer pSampleRate = stack.mallocInt(1);
@@ -121,5 +125,33 @@ public class SoundLoader {
             audioData.flip();
             return new Sound(audioData, channels, sampleRate, bitsPerSample);
         }
+    }
+
+    @Override
+    public Sound load(AssetIdentifier path) {
+        String filePath = path.path();
+
+        int i = filePath.lastIndexOf('.');
+        if (i > 0 && i < filePath.length() - 1) {
+            String extension = filePath.substring(i + 1).toLowerCase();
+
+            if (extension.equals("wav"))
+                return loadWav(ResourceHelper.loadFileFromAssetsOrResources(filePath));
+            else if (extension.equals("ogg"))
+                return loadOgg(ResourceHelper.loadFileFromAssetsOrResources(filePath));
+            else {
+                System.out.println("Tried to load unknown audio type: " + filePath);
+                return null; // idk what this is
+            }
+
+        } else {
+            System.out.println("Tried to load invalid audio file: " + filePath);
+            return null;
+        }
+    }
+
+    @Override
+    public void dispose(Sound asset) {
+        asset.destroy();
     }
 }

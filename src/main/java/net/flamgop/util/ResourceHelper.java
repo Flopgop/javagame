@@ -2,9 +2,7 @@ package net.flamgop.util;
 
 import org.lwjgl.system.MemoryUtil;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.ByteBuffer;
 
 public class ResourceHelper {
@@ -27,5 +25,37 @@ public class ResourceHelper {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static ByteBuffer loadFileFromAssets(String path) {
+        try (FileInputStream fis = new FileInputStream("./assets/" + path)) {
+            byte[] bytes = fis.readAllBytes();
+            ByteBuffer buf = MemoryUtil.memAlloc(bytes.length);
+            buf.put(0, bytes);
+            return buf;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static String loadFileContentsFromAssets(String path) {
+        try (FileInputStream fis = new FileInputStream("./assets/" + path)) {
+            return new String(fis.readAllBytes());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // loads from resources, unless it exists in assets
+    public static ByteBuffer loadFileFromAssetsOrResources(String path) {
+        File file = new File("./assets/" + path);
+        if (file.exists()) return loadFileFromAssets(path);
+        else return loadFileFromResource(path);
+    }
+
+    public static String loadFileContentsFromAssetsOrResources(String path) {
+        File file = new File("./assets/" + path);
+        if (file.exists()) return loadFileContentsFromAssets(path);
+        else return loadFileContentsFromResource(path);
     }
 }

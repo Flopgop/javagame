@@ -1,6 +1,6 @@
 package net.flamgop.level;
 
-import net.flamgop.asset.AssetLoader;
+import net.flamgop.asset.AssetManager;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
@@ -88,14 +88,14 @@ public class Level {
         lightArray.lights.add(light);
     }
 
-    public void staticMesh(AssetLoader assetLoader, JsonStaticMesh jsonMesh) {
-        StaticMesh mesh = StaticMesh.fromJson(assetLoader, physics, jsonMesh);
+    public void staticMesh(AssetManager assetManager, JsonStaticMesh jsonMesh) {
+        StaticMesh mesh = StaticMesh.fromJson(assetManager, physics, jsonMesh);
         mesh.addToScene(scene);
         staticMeshes.add(mesh);
     }
 
-    public void dynamicEntity(AssetLoader assetLoader, JsonDynamicEntity jsonEntity) {
-        DynamicEntity entity = DynamicEntity.fromJson(assetLoader, physics, jsonEntity);
+    public void dynamicEntity(AssetManager assetManager, JsonDynamicEntity jsonEntity) {
+        DynamicEntity entity = DynamicEntity.fromJson(assetManager, physics, jsonEntity);
         entity.addToScene(scene);
         dynamicEntities.add(entity);
     }

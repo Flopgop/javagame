@@ -1,7 +1,7 @@
 package net.flamgop.level;
 
-import net.flamgop.asset.AssetKey;
-import net.flamgop.asset.AssetLoader;
+import net.flamgop.asset.AssetIdentifier;
+import net.flamgop.asset.AssetManager;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.model.Model;
@@ -20,13 +20,13 @@ import physx.geometry.PxConvexMesh;
 import physx.geometry.PxConvexMeshGeometry;
 import physx.physics.*;
 
-import java.io.FileNotFoundException;
+import java.nio.ByteBuffer;
 
 public class DynamicEntity {
 
-    public static DynamicEntity fromJson(AssetLoader assetLoader, Physics physics, JsonDynamicEntity entity) {
+    public static DynamicEntity fromJson(AssetManager assetManager, Physics physics, JsonDynamicEntity entity) {
         return new DynamicEntity(
-                assetLoader,
+                assetManager,
                 physics,
                 entity.identifier,
                 entity.modelIdentifier,
@@ -50,7 +50,7 @@ public class DynamicEntity {
     private final UniformBuffer modelUniformBuffer;
 
     public DynamicEntity(
-            AssetLoader assetLoader,
+            AssetManager assetManager,
             Physics physics,
             String identifier,
             String modelIdentifier,
@@ -62,11 +62,7 @@ public class DynamicEntity {
             int collidesWithFlag,
             int collisionGroup
     ) {
-        try {
-            this.collisionMesh = physics.loadConvexMesh(assetLoader.load(AssetKey.fromString(collisionModelIdentifier)));
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+        this.collisionMesh = physics.loadConvexMesh(assetManager.loadSync(new AssetIdentifier(collisionModelIdentifier), ByteBuffer.class).get());
         collisionMeshGeometry = new PxConvexMeshGeometry(collisionMesh);
         PxShapeFlags shapeFlags = new PxShapeFlags((byte)  (PxShapeFlagEnum.eSCENE_QUERY_SHAPE.value | PxShapeFlagEnum.eSIMULATION_SHAPE.value | PxShapeFlagEnum.eVISUALIZATION.value));
         PxTransform transform = new PxTransform(PxIDENTITYEnum.PxIdentity);
@@ -87,12 +83,7 @@ public class DynamicEntity {
         transform.destroy();
         filterData.destroy();
 
-        this.model = new Model();
-        try {
-            this.model.load(assetLoader, modelIdentifier);
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+        this.model = assetManager.loadSync(new AssetIdentifier(modelIdentifier), Model.class).get();
         this.modelUniformBuffer = new UniformBuffer(GPUBuffer.UpdateHint.STREAM);
         this.modelUniformBuffer.allocate(this.modelUniformData);
         this.modelUniformBuffer.buffer().label(identifier + " Model UBO");
