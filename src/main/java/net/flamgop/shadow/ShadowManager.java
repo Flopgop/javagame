@@ -1,6 +1,9 @@
 package net.flamgop.shadow;
 
+import net.flamgop.Game;
 import net.flamgop.gpu.Camera;
+import net.flamgop.gpu.GPUFramebuffer;
+import net.flamgop.gpu.GPUTexture;
 import net.flamgop.gpu.ShaderProgram;
 import net.flamgop.gpu.model.Material;
 import net.flamgop.gpu.model.TexturedMesh;
@@ -10,37 +13,97 @@ import net.flamgop.util.ResourceHelper;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
-import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
+
+import java.nio.FloatBuffer;
+import java.util.Arrays;
 
 import static org.lwjgl.opengl.GL46.*;
 
 public class ShadowManager {
 
     private final Material depthOnlyMaterial;
-    private final ShaderProgram depthOnlyShaderProgram;
+    private final ShaderProgram shadowShaderProgram;
 
-    public ShadowManager() {
-        depthOnlyShaderProgram = new ShaderProgram();
-        depthOnlyShaderProgram.attachShaderSource("Depth Only Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.vertex.glsl"), GL_VERTEX_SHADER);
-        depthOnlyShaderProgram.link();
-        depthOnlyShaderProgram.label("Depth Only Program");
-        depthOnlyMaterial = new Material(depthOnlyShaderProgram);
+    private final Camera camera;
+
+    private final float lambda = 0.6f;
+
+    private final int cascadeCount;
+    private final int largestCascadeResolution;
+    private final GPUFramebuffer shadowFramebuffer;
+    private GPUTexture cascades;
+
+    public ShadowManager(Camera camera, int resolution, int cascadeCount) {
+        this.camera = camera;
+        this.cascadeCount = cascadeCount;
+        this.largestCascadeResolution = resolution;
+        shadowShaderProgram = new ShaderProgram();
+        shadowShaderProgram.attachShaderSource("Shadow Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.vertex.glsl"), GL_VERTEX_SHADER);
+        shadowShaderProgram.attachShaderSource("Shadow Geometry Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.geometry.glsl"), GL_GEOMETRY_SHADER);
+        shadowShaderProgram.link();
+        shadowShaderProgram.label("Shadow Program");
+        depthOnlyMaterial = new Material(shadowShaderProgram);
+
+        shadowFramebuffer = new GPUFramebuffer(resolution, resolution, (fb, w, h) -> {
+            cascades = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D_ARRAY); // this is cursed lmao
+            cascades.storage(1, GL_DEPTH_COMPONENT32F, w, h, cascadeCount);
+            glTextureParameteri(cascades.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(cascades.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(cascades.handle(), GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            glTextureParameteri(cascades.handle(), GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+
+            cascades.label("Shadow Depth Texture Array");
+
+            fb.texture(cascades, GL_DEPTH_ATTACHMENT, 0);
+        }, (fb) -> {
+            cascades.destroy();
+        });
+        shadowFramebuffer.label("Shadow Framebuffer");
+    }
+
+    public int cascades() {
+        return this.cascadeCount;
+    }
+
+    public float lambda() {
+        return this.lambda;
+    }
+
+    public GPUTexture texture() {
+        return cascades;
     }
 
     public void prepareShadowPass() {
         TexturedMesh.overrideMaterial(depthOnlyMaterial);
     }
 
-    public void bind(Matrix4f matrix, ShaderProgram shaderProgram) {
+    public void bindFramebuffer() {
+        glViewport(0,0, this.largestCascadeResolution, this.largestCascadeResolution);
+        shadowFramebuffer.clear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    }
+
+    public void bindUniforms(ShaderProgram shaderProgram, Matrix4f lightView) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            if (shaderProgram == null) shaderProgram = depthOnlyShaderProgram;
-            glProgramUniformMatrix4fv(shaderProgram.handle(), shaderProgram.getUniformLocation("shadow_view_proj"), false, matrix.get(stack.callocFloat(16)));
+            if (shaderProgram == null) shaderProgram = shadowShaderProgram;
+            FloatBuffer matrixBuffer = stack.callocFloat(16);
+            float[] splits = CascadedShadowMaps.computeCascadeSplits(cascadeCount, camera.near(), camera.far(), lambda);
+            Matrix4f[] cascades = CascadedShadowMaps.computeCascadeMatrices(camera, lightView, this.cascadeCount, this.largestCascadeResolution, splits);
+            for (int i = 0; i < cascadeCount; i++) {
+                glProgramUniform1f(shaderProgram.handle(), shaderProgram.getUniformLocation("cascade_distances[" + i + "]"), splits[i + 1]);
+                glProgramUniformMatrix4fv(shaderProgram.handle(), shaderProgram.getUniformLocation("cascade_matrices[" + i + "]"), false, cascades[i].get(matrixBuffer));
+                matrixBuffer.clear();
+            }
         }
     }
 
     public void finishShadowPass() {
         TexturedMesh.disableMaterialOverride();
+    }
+
+    public static Matrix4f getShadowView(DirectionalLight light) {
+        return new Matrix4f()
+                .lookAt(new Vector3f(new Vector3f(light.direction).normalize()).mul(-100), new Vector3f(0,0,0), new Vector3f(0,1,0));
     }
 
     public static Matrix4f getShadowMatrix(Camera camera, DirectionalLight light, int resolution) {
@@ -60,7 +123,7 @@ public class ShadowManager {
         return new Matrix4f(proj).mul(lightView);
     }
 
-    public static FrustumPlane[] getShadowFrustumPlanes(Camera camera, DirectionalLight light, int resolution) {
+    public static FrustumPlane[] getShadowFrustumPlanes(Camera camera, DirectionalLight light, int resolution, int cascade) {
         Matrix4f viewProj = getShadowMatrix(camera, light, resolution);
 
         float m00 = viewProj.m00(), m01 = viewProj.m01(), m02 = viewProj.m02(), m03 = viewProj.m03();

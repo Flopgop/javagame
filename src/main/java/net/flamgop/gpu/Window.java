@@ -141,6 +141,7 @@ public class Window {
     }
 
     private void handleKeyInput(int key, int scancode, int action, int mods) {
+        if (key == -1) return; // what the fuck
         inputSequenceHandler.handleKey(key, mods, action);
         inputState.handleKey(key, action);
     }

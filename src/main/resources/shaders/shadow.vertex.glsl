@@ -2,8 +2,6 @@
 
 layout(location = 0) in vec3 position;
 
-uniform mat4 shadow_view_proj;
-
 layout(std140, binding = 1) uniform ObjectData {
     mat4 model;
     mat4 normal;
@@ -12,5 +10,5 @@ layout(std140, binding = 1) uniform ObjectData {
 void main() {
     vec4 world_pos = obj_in.model * vec4(position, 1.0);
 
-    gl_Position = shadow_view_proj * world_pos;
+    gl_Position = world_pos;
 }

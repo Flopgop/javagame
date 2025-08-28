@@ -1,5 +1,7 @@
 #version 460 core
 
+#define NUM_CASCADES 4
+
 in FragmentInput {
     vec3 screen_pos;
     vec3 normal;
@@ -20,7 +22,8 @@ layout(std140, binding = 1) uniform PBRData {
     float light_count;
 } pbr_in;
 
-uniform mat4 shadow_view_proj;
+uniform mat4 cascade_matrices[NUM_CASCADES];
+uniform float cascade_distances[NUM_CASCADES];
 
 uniform sampler2D gbuffer_position;
 uniform sampler2D gbuffer_normal;
@@ -29,7 +32,7 @@ uniform sampler2D gbuffer_material;
 uniform sampler2D gbuffer_depth;
 
 uniform sampler2D shadow_blue_noise;
-uniform sampler2DShadow shadow_depth;
+uniform sampler2DArrayShadow shadow_depth;
 
 uniform float z_near;
 uniform float z_far;
@@ -98,10 +101,10 @@ float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-vec3 shadow_coords(vec3 world_pos) {
-    vec4 shadow_pos = shadow_view_proj * vec4(world_pos, 1.0);
-    shadow_pos.xyz /= shadow_pos.w;
-    return shadow_pos.xyz * 0.5 + 0.5;
+float linearize_depth(float depth)
+{
+    float z = depth * 2.0 - 1.0; // back to NDC
+    return (2.0 * z_near * z_far) / (z_far + z_near - z * (z_far - z_near));
 }
 
 const vec2 poissonDisk[32] = vec2[](
@@ -139,27 +142,32 @@ const vec2 poissonDisk[32] = vec2[](
     vec2( 0.918452,  0.145421)
 );
 
-float shadow_factor(vec3 world_pos) {
-    vec3 sc = shadow_coords(world_pos);
+float shadow_factor(vec3 world_pos, vec3 normal, int cascade) {
+    cascade = clamp(cascade, 0, NUM_CASCADES - 1);
+
+    vec4 sc = cascade_matrices[cascade] * vec4(world_pos, 1.0);
+    sc.xyz /= sc.w;
+    sc = sc * 0.5 + 0.5;
 
     if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0)
         return 1.0;
 
-    float current_depth = sc.z - 0.0005;
+    vec3 lightDir = normalize(-pbr_in.light_direction);
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.0005);
+
+    float current_depth = sc.z - bias;
 
     float shadow = 0.0;
-    float texelScale = 2.0;
-    vec2 texelSize = 1.0 / textureSize(shadow_depth, 0);
-    texelSize *= texelScale;
+    float texelScale = 1.5; // tweak for softness
+    vec2 texelSize = 1.0 / vec2(textureSize(shadow_depth, 0).xy) * texelScale;
 
-    float rand = texture(shadow_blue_noise, gl_FragCoord.xy / textureSize(shadow_blue_noise, 0)).r;
+    float rand = texture(shadow_blue_noise, fs_in.texcoord.xy / textureSize(shadow_blue_noise, 0)).r;
     float angle = rand * 6.2831853; // 0..2π
     mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
 
-    // Apply rotation to poisson samples
     for (int i = 0; i < 16; i++) {
         vec2 offset = rot * poissonDisk[i];
-        shadow += texture(shadow_depth, vec3(sc.xy + offset * texelSize, current_depth));
+        shadow += texture(shadow_depth, vec4(sc.xy + offset * texelSize, cascade, current_depth));
     }
     shadow /= 16.0;
 
@@ -272,7 +280,16 @@ void main() {
     vec3 sunColor = pbr_in.light_color.rgb * pbr_in.light_color.a;
     vec3 sunDir = -normalize(pbr_in.light_direction);
 
-    float shadow = shadow_factor(position);
+    float cascade_depth = linearize_depth(depth);
+
+    int cascade;
+    for (cascade = 0; cascade < NUM_CASCADES; cascade++) {
+        if (cascade_depth < cascade_distances[cascade]) {
+            break;
+        }
+    }
+
+    float shadow = shadow_factor(position, normal, cascade);
     float levels = 4.0;
     shadow = floor(shadow * levels) / levels;
     lighting += shadow * calculate_sun_contribution(sunDir, sunColor, color, position, V, N, F0, roughness, metallic);

@@ -109,6 +109,18 @@ public class Player {
         this.gravity = 2 * scene.gravity();
     }
 
+    public Camera camera() {
+        return camera;
+    }
+
+    public Vector3f position() {
+        return new Vector3f(positionView);
+    }
+
+    public Vector3f velocity() {
+        return new Vector3f(velocity);
+    }
+
     public void noclip() {
         fly = !fly;
     }

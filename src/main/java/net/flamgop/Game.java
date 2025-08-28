@@ -7,7 +7,6 @@ import imgui.ImVec2;
 import imgui.flag.*;
 import imgui.gl3.ImGuiImplGl3;
 import imgui.glfw.ImGuiImplGlfw;
-import imgui.type.ImString;
 import net.flamgop.asset.AssetKey;
 import net.flamgop.asset.AssetLoader;
 import net.flamgop.asset.AssetType;
@@ -19,8 +18,11 @@ import net.flamgop.physics.Physics;
 import net.flamgop.screen.PauseScreen;
 import net.flamgop.screen.Screen;
 import net.flamgop.shadow.ShadowManager;
+import net.flamgop.sound.Sound;
+import net.flamgop.sound.SoundLoader;
+import net.flamgop.sound.SoundManager;
+import net.flamgop.sound.SoundSource;
 import net.flamgop.text.Font;
-import net.flamgop.text.FontAwesomeIcons;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.util.ResourceHelper;
 import net.flamgop.util.Util;
@@ -112,9 +114,7 @@ public class Game {
     private GPUTexture gBufferMaterialTexture;
     private GPUTexture gBufferDepthTexture;
 
-    private final GPUFramebuffer shadowFramebuffer;
     private final GPUTexture shadowBlueNoiseTexture;
-    private GPUTexture shadowDepthTexture;
     private final int shadowResolution = 4096;
 
     private final TextRenderer textRenderer;
@@ -141,6 +141,10 @@ public class Game {
 
     private final ShadowManager shadowManager;
     private final AssetLoader assetLoader;
+
+    private final SoundManager soundManager;
+    private final SoundSource soundSource;
+    private final Sound sound;
 
     private final Screen pauseScreen;
     private @Nullable Screen currentScreen;
@@ -240,7 +244,6 @@ public class Game {
         GPUTexture.loadBlit();
         DefaultShaders.loadDefaultShaders();
         Material.loadMissingMaterial();
-        shadowManager = new ShadowManager();
 
         this.assetLoader = new AssetLoader("./assets/");
 
@@ -362,21 +365,6 @@ public class Game {
         });
         gFramebuffer.label("GBuffer");
 
-        shadowFramebuffer = new GPUFramebuffer(shadowResolution, shadowResolution, (fb, w, h) -> {
-            shadowDepthTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
-            shadowDepthTexture.storage(1, GL_DEPTH24_STENCIL8, w, h);
-            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-            glTextureParameteri(shadowDepthTexture.handle(), GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-            shadowDepthTexture.label("Shadow Depth Texture");
-
-            fb.texture(shadowDepthTexture, GL_DEPTH_STENCIL_ATTACHMENT, 0);
-        }, (fb) -> {
-            shadowDepthTexture.destroy();
-        });
-        shadowFramebuffer.label("Shadow Framebuffer");
-
         try {
             shadowBlueNoiseTexture = GPUTexture.loadFromBytes(assetLoader.load(new AssetKey(AssetType.RESOURCE, "bluenoise.png")));
             glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -401,14 +389,19 @@ public class Game {
                 0.01f,
                 100f
         );
-        frustumCulling = new FrustumCulling(level.skylight(), shadowResolution, camera);
         clusteredShading = new ClusteredShading(level);
+        shadowManager = new ShadowManager(camera, shadowResolution, 4);
+        frustumCulling = new FrustumCulling(shadowManager, level.skylight(), shadowResolution, camera);
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
 
         font.writeAtlasToDisk(new File("font.png"));
 
         this.player = new Player(physics, level.scene(), camera, window.inputState());
+        this.soundManager = new SoundManager(player);
+        this.soundSource = new SoundSource();
+        this.sound = SoundLoader.loadWav(assetLoader.load(new AssetKey(AssetType.RESOURCE, "sound.wav")));
+        if (!sound.valid()) throw new RuntimeException("Sound isn't valid!");
     }
 
     private void start() {
@@ -416,6 +409,7 @@ public class Game {
         window.show();
         window.focusWindow();
         window.requestAttention();
+        this.soundSource.playSound(sound);
 
         while (!this.shouldClose()) {
             double time = GLFW.glfwGetTime();
@@ -426,6 +420,10 @@ public class Game {
         }
 
         this.cleanup();
+    }
+
+    public Level level() {
+        return level;
     }
 
     public FrustumCulling culling() {
@@ -535,6 +533,7 @@ public class Game {
             fixedUpdate(delta);
             level.update(delta);
             player.update(delta);
+            this.soundManager.update();
         }
 
         if (currentScreen != null) {
@@ -555,8 +554,7 @@ public class Game {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 1, "Shadow Pass");
         glBeginQuery(GL_TIME_ELAPSED, passQueries[0]);
 
-        glViewport(0,0, shadowResolution,shadowResolution);
-        shadowFramebuffer.clear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        this.shadowManager.bindFramebuffer();
 
         glFrontFace(GL_CCW);
         glCullFace(GL_BACK);
@@ -566,7 +564,7 @@ public class Game {
 
         culling().shadow(true);
         shadowManager.prepareShadowPass();
-        shadowManager.bind(ShadowManager.getShadowMatrix(camera, level.skylight(), shadowResolution), null);
+        shadowManager.bindUniforms(null, ShadowManager.getShadowView(this.level.skylight()));
         level.render(delta);
         shadowManager.finishShadowPass();
         culling().shadow(false);
@@ -590,11 +588,6 @@ public class Game {
         glCullFace(GL_BACK);
 
         glEnable(GL_CULL_FACE);
-
-        glDepthMask(false);
-
-        glDepthMask(true);
-
         glEnable(GL_DEPTH_TEST);
 
         camera.bind(0);
@@ -626,12 +619,12 @@ public class Game {
         glBindTextureUnit(3, gBufferMaterialTexture.handle());
         glBindTextureUnit(4, gBufferDepthTexture.handle());
         glBindTextureUnit(5, shadowBlueNoiseTexture.handle());
-        glBindTextureUnit(6, shadowDepthTexture.handle());
+        glBindTextureUnit(6, this.shadowManager.texture().handle());
         glProgramUniform1f(gBufferBlit.handle(), gBufferBlit.getUniformLocation("z_near"), camera.near());
         glProgramUniform1f(gBufferBlit.handle(), gBufferBlit.getUniformLocation("z_far"), camera.far());
         glProgramUniform3i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("grid_size"), ClusteredShading.GRID_SIZE_X, ClusteredShading.GRID_SIZE_Y, ClusteredShading.GRID_SIZE_Z);
         glProgramUniform2i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("screen_dimensions"), window.width(), window.height());
-        shadowManager.bind(ShadowManager.getShadowMatrix(camera, this.level.skylight(), shadowResolution), gBufferBlit);
+        shadowManager.bindUniforms(gBufferBlit, ShadowManager.getShadowView(this.level.skylight()));
         quad.draw();
         gFramebuffer.copyDepthToBuffer(finalFramebuffer, this.window.width(), this.window.height());
 
@@ -693,9 +686,7 @@ public class Game {
         };
     }
 
-    int count = 0;
-    ImString str = new ImString();
-    float[] flt = new float[1];
+    float[] gain = new float[]{1.0f};
     private void renderImGui() {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 7, "ImGui Pass");
         glBeginQuery(GL_TIME_ELAPSED, passQueries[6]);
@@ -721,19 +712,11 @@ public class Game {
 
         ImGui.end();
 
-        if (ImGui.begin("Demo", ImGuiWindowFlags.AlwaysAutoResize)) {
-            ImGui.text("OS: [" + System.getProperty("os.name") + "] Arch: [" + System.getProperty("os.arch") + "]");
-            ImGui.text("Hello, World! " + FontAwesomeIcons.Smile);
-            if (ImGui.button(FontAwesomeIcons.Save + " Save")) {
-                count++;
+        if (ImGui.begin("Settings", ImGuiWindowFlags.AlwaysAutoResize)) {
+            ImGui.sliderFloat("Gain", gain, 0, 1);
+            if (ImGui.isItemDeactivatedAfterEdit()) {
+                this.soundManager.masterGain(gain[0]);
             }
-            ImGui.sameLine();
-            ImGui.text(String.valueOf(count));
-            ImGui.inputText("string", str, ImGuiInputTextFlags.CallbackResize);
-            ImGui.text("Result: " + str.get());
-            ImGui.sliderFloat("float", flt, 0, 1);
-            ImGui.separator();
-            ImGui.text("Extra");
         }
         ImGui.end();
 
