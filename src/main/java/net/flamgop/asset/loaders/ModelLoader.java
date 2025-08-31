@@ -141,20 +141,20 @@ public class ModelLoader implements Loader<Model> {
 
         float maxAniso = glGetFloat(GL_MAX_TEXTURE_MAX_ANISOTROPY);
         if (roughness != null) {
-            glTextureParameteri(roughness.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTextureParameteri(roughness.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameterf(roughness.handle(), GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
+            roughness.minFilter(GPUTexture.MinFilter.LINEAR_MIPMAP_LINEAR);
+            roughness.magFilter(GPUTexture.MagFilter.LINEAR);
+            roughness.maxAnisotropy(maxAniso);
 
         }
         if (metallic != null) {
-            glTextureParameteri(metallic.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTextureParameteri(metallic.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameterf(metallic.handle(), GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
+            metallic.minFilter(GPUTexture.MinFilter.LINEAR_MIPMAP_LINEAR);
+            metallic.magFilter(GPUTexture.MagFilter.LINEAR);
+            metallic.maxAnisotropy(maxAniso);
         }
         if (normal != null) {
-            glTextureParameteri(normal.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTextureParameteri(normal.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameterf(normal.handle(), GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
+            normal.minFilter(GPUTexture.MinFilter.LINEAR_MIPMAP_LINEAR);
+            normal.magFilter(GPUTexture.MagFilter.LINEAR);
+            normal.maxAnisotropy(maxAniso);
         }
 
         material = new Material(DefaultShaders.GBUFFER,
@@ -188,7 +188,7 @@ public class ModelLoader implements Loader<Model> {
 
                 AssetIdentifier pathIdentifier = new AssetIdentifier(sourcePath + "/" + texturePath);
                 if (!assetManager.isTracking(pathIdentifier)) {
-                    texture = GPUTexture.loadFromAssimpTexture(aiTexture);
+                    texture = TextureLoader.loadFromAssimpTexture(aiTexture);
 
                     Asset<GPUTexture> asset = new Asset<>(texture);
                     assetManager.track(pathIdentifier, asset);
@@ -204,7 +204,7 @@ public class ModelLoader implements Loader<Model> {
             if (aiTexture.mHeight() == 0) {
                 AssetIdentifier pathIdentifier = new AssetIdentifier(sourcePath + "/*" + texIndex[0]);
                 if (!assetManager.isTracking(pathIdentifier)) {
-                    texture = GPUTexture.loadFromAssimpTexture(aiTexture);
+                    texture = TextureLoader.loadFromAssimpTexture(aiTexture);
 
                     Asset<GPUTexture> asset = new Asset<>(texture);
                     assetManager.track(pathIdentifier, asset);

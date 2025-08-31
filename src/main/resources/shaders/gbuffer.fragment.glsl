@@ -6,6 +6,13 @@ in FragmentInput {
     mat3 TBN;
 } fs_in;
 
+layout(std140, binding = 0) uniform CameraData {
+    mat4 view;
+    mat4 proj;
+    vec3 camera_pos;
+    float _pad0;
+} cam_in;
+
 uniform sampler2D texture_diffuse;
 uniform sampler2D texture_roughness;
 uniform sampler2D texture_metallic;
@@ -17,7 +24,7 @@ layout(location = 2) out vec3 gbuffer_color;
 layout(location = 3) out vec4 gbuffer_material;
 
 void main() {
-    gbuffer_position = fs_in.world_pos;
+    gbuffer_position = fs_in.world_pos - cam_in.camera_pos;
 
     vec3 normal = texture(texture_normal, fs_in.texcoord).rgb;
     normal = normalize(normal * 2.0 - 1.0);

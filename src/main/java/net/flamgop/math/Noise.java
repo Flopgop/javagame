@@ -38,7 +38,7 @@ public class Noise {
         float amplitude = 1f;
         for (final float xFreq : FREQUENCIES_X) {
             for (final float yFreq : FREQUENCIES_Y) {
-                float nx = x * xFreq * 10f * xFreq;
+                float nx = x * xFreq + 10f * xFreq;
                 float ny = y * yFreq + 10f * yFreq;
 
                 float theta = xFreq * yFreq;

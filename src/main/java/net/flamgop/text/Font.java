@@ -66,7 +66,7 @@ public class Font {
         textAtlasBuffer = MemoryUtil.memAlloc(textAtlasWidth * textAtlasHeight);
         generateAtlas(glyphCount, characterPadding);
 
-        textAtlasTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+        textAtlasTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
         textAtlasTexture.storage(1, GL_R8, textAtlasWidth, textAtlasHeight);
         glTextureSubImage2D(textAtlasTexture.handle(), 0, 0, 0, textAtlasWidth, textAtlasHeight, GL_RED, GL_UNSIGNED_BYTE, textAtlasBuffer);
         glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR);

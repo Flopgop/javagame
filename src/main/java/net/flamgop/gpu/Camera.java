@@ -2,7 +2,7 @@ package net.flamgop.gpu;
 
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
-import net.flamgop.gpu.uniform.CameraUniformData;
+import net.flamgop.gpu.data.CameraUniformData;
 import net.flamgop.util.AABB;
 import net.flamgop.util.FrustumPlane;
 import org.joml.Matrix4f;
@@ -103,14 +103,17 @@ public class Camera {
 
     public void fov(float fov) {
         this.fov = fov;
+        reconfigureProjection();
     }
 
     public void near(float near) {
         this.near = near;
+        reconfigureProjection();
     }
 
     public void far(float far) {
         this.far = far;
+        reconfigureProjection();
     }
 
     public float fov() {

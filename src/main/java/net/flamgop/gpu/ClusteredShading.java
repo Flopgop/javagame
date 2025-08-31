@@ -6,7 +6,6 @@ import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;
 import net.flamgop.level.Level;
 import net.flamgop.util.ResourceHelper;
-import net.flamgop.util.Util;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
@@ -62,8 +61,8 @@ public class ClusteredShading {
 
     private final Level level;
 
-    private final int gatherQuery;
-    private final int cullQuery;
+    private final Query gatherQuery;
+    private final Query cullQuery;
 
     private long gatherTimeNs;
     private long cullTimeNs;
@@ -81,23 +80,24 @@ public class ClusteredShading {
 
         clusterGridSSBO = new ShaderStorageBuffer(GPUBuffer.BufferUsage.STATIC_COPY);
         clusterGridSSBO.buffer().allocate(Cluster.BYTES * NUM_CLUSTERS);
+        clusterGridSSBO.buffer().label("Cluster Grid SSBO");
 
         this.level = level;
 
-        this.gatherQuery = glCreateQueries(GL_TIME_ELAPSED);
-        this.cullQuery = glCreateQueries(GL_TIME_ELAPSED);
+        this.gatherQuery = new Query(Query.QueryTarget.TIME_ELAPSED);
+        this.cullQuery = new Query(Query.QueryTarget.TIME_ELAPSED);
     }
 
     public long gatherTimeNs() {
-        if (Util.isQueryReady(gatherQuery)) {
-            gatherTimeNs = Util.getQueryTime(gatherQuery);
+        if (gatherQuery.isResultAvailable()) {
+            gatherTimeNs = gatherQuery.getResult64();
         }
         return gatherTimeNs;
     }
 
     public long cullTimeNs() {
-        if (Util.isQueryReady(cullQuery)) {
-            cullTimeNs = Util.getQueryTime(cullQuery);
+        if (cullQuery.isResultAvailable()) {
+            cullTimeNs = cullQuery.getResult64();
         }
         return cullTimeNs;
     }
@@ -112,28 +112,27 @@ public class ClusteredShading {
         int width = Game.INSTANCE.window().width();
         int height = Game.INSTANCE.window().height();
 
-        glBeginQuery(GL_TIME_ELAPSED, this.gatherQuery);
-        gatherClustersProgram.use();
-        clusterGridSSBO.bind(1);
-        glProgramUniform1f(gatherClustersProgram.handle(), gatherClustersProgram.getUniformLocation("zNear"), camera.near());
-        glProgramUniform1f(gatherClustersProgram.handle(), gatherClustersProgram.getUniformLocation("zFar"), camera.far());
-        glProgramUniformMatrix4fv(gatherClustersProgram.handle(), gatherClustersProgram.getUniformLocation("inverseProjection"), false, camera.projection().invert(new Matrix4f()).get(new float[16]));
-        glProgramUniform3ui(gatherClustersProgram.handle(), gatherClustersProgram.getUniformLocation("gridSize"), GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
-        glProgramUniform2ui(gatherClustersProgram.handle(), gatherClustersProgram.getUniformLocation("screenDimensions"), width, height);
+        try (Query.QueryCloser _ = gatherQuery.begin()) {
+            gatherClustersProgram.use();
+            clusterGridSSBO.bind(1);
+            gatherClustersProgram.uniform1f(gatherClustersProgram.getUniformLocation("zNear"), camera.near());
+            gatherClustersProgram.uniform1f(gatherClustersProgram.getUniformLocation("zFar"), camera.far());
+            gatherClustersProgram.uniformMatrix4fv(gatherClustersProgram.getUniformLocation("inverseProjection"), false, camera.projection().invert(new Matrix4f()));
+            gatherClustersProgram.uniform3ui(gatherClustersProgram.getUniformLocation("gridSize"), GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
+            gatherClustersProgram.uniform2ui(gatherClustersProgram.getUniformLocation("screenDimensions"), width, height);
 
-        glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-        glEndQuery(GL_TIME_ELAPSED);
-        glBeginQuery(GL_TIME_ELAPSED, this.cullQuery);
+            glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
+        try (Query.QueryCloser _ = cullQuery.begin()) {
+            cullLightsProgram.use();
+            clusterGridSSBO.bind(1);
+            level.lightSSBO().bind(2);
+            gatherClustersProgram.uniformMatrix4fv(cullLightsProgram.getUniformLocation("viewMatrix"), false, camera.view());
 
-        cullLightsProgram.use();
-        clusterGridSSBO.bind(1);
-        level.lightSSBO().bind(2);
-        glProgramUniformMatrix4fv(cullLightsProgram.handle(), cullLightsProgram.getUniformLocation("viewMatrix"), false, camera.view().get(new float[16]));
-
-        glDispatchCompute(27, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-        glEndQuery(GL_TIME_ELAPSED);
+            glDispatchCompute(27, 1, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
 
         glPopDebugGroup();
     }

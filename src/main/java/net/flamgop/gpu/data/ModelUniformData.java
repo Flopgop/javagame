@@ -1,7 +1,6 @@
-package net.flamgop.gpu.uniform;
+package net.flamgop.gpu.data;
 
 import net.flamgop.gpu.buffer.BufferSerializable;
-import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;

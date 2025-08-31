@@ -5,11 +5,7 @@ import java.nio.ByteOrder;
 
 public class Vertex {
 
-    public static final int BYTES = 3 * Float.BYTES + 2 * Float.BYTES + 2 * Integer.BYTES;
-
-    static {
-        System.out.println("Vertex size is " + BYTES + " bytes.");
-    }
+    public static final int BYTES = 5 * Float.BYTES + 2 * Integer.BYTES;
 
     private static int pack10(float f) {
         f = Math.max(-1.0f, Math.min(1.0f, f));
@@ -25,8 +21,8 @@ public class Vertex {
         return (w << 30) | (z << 20) | (y << 10) | x;
     }
 
-    private final float[] position = new float[3];
-    private final float[] texcoord = new float[2];
+    private float x, y, z;
+    private float u, v;
     private int tangent = 0;
     private int normal = 0;
 
@@ -39,16 +35,19 @@ public class Vertex {
 
     public void get(ByteBuffer buffer) {
         buffer.order(ByteOrder.LITTLE_ENDIAN);
-        for (float f : position) buffer.putFloat(f);
-        for (float f : texcoord) buffer.putFloat(f);
+        buffer.putFloat(x);
+        buffer.putFloat(y);
+        buffer.putFloat(z);
+        buffer.putFloat(u);
+        buffer.putFloat(v);
         buffer.putInt(normal);
         buffer.putInt(tangent);
     }
 
     public void position(float x, float y, float z) {
-        position[0] = x;
-        position[1] = y;
-        position[2] = z;
+        this.x = x;
+        this.y = y;
+        this.z = z;
     }
 
     public void normal(float x, float y, float z) {
@@ -56,8 +55,8 @@ public class Vertex {
     }
 
     public void texcoord(float u, float v) {
-        texcoord[0] = u;
-        texcoord[1] = v;
+        this.u = u;
+        this.v = v;
     }
 
     public void tangent(float x, float y, float z, int w) {

@@ -59,8 +59,11 @@ void main()
     vec3 maxPointFar =
     lineIntersectionWithZPlane(vec3(0, 0, 0), maxTile, planeFar);
 
-    clusters[tileIndex].minPoint = vec4(min(minPointNear, minPointFar), 0.0);
-    clusters[tileIndex].maxPoint = vec4(max(maxPointNear, maxPointFar), 0.0);
+    vec3 aabbMin = min(min(minPointNear, minPointFar), min(maxPointNear, maxPointFar));
+    vec3 aabbMax = max(max(minPointNear, minPointFar), max(maxPointNear, maxPointFar));
+
+    clusters[tileIndex].minPoint = vec4(aabbMin, 0.0);
+    clusters[tileIndex].maxPoint = vec4(aabbMax, 0.0);
 }
 
 // Returns the intersection point of an infinite line and a

@@ -24,7 +24,6 @@ import net.flamgop.sound.SoundSource;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.util.ResourceHelper;
-import net.flamgop.util.Util;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
@@ -116,7 +115,7 @@ public class Game {
 
     private final ShadowManager shadowManager;
     private final GPUTexture shadowBlueNoiseTexture;
-    private final int shadowResolution = 2048;
+    private final int shadowResolution = 4096;
 
     private final TextRenderer textRenderer;
     private final Font font;
@@ -127,7 +126,7 @@ public class Game {
     private double framerate = 1 / frameTime;
     private double framerateUpdateCounter = FRAMERATE_UPDATE_RATE;
 
-    private final int[] passQueries = new int[7];
+    private final Query[] passQueries = new Query[7];
     private final long[] passTimes = new long[7];
 
     private final Camera camera;
@@ -140,7 +139,6 @@ public class Game {
 
     private final Level level;
 
-//    private final AssetLoader assetLoader;
     private final AssetManager assetManager;
 
     private final SoundManager soundManager;
@@ -241,12 +239,6 @@ public class Game {
         imGuiGl3 = new ImGuiImplGl3();
         imGuiGl3.init("#version 430 core");
 
-        GPUTexture.loadMissingTexture();
-        GPUTexture.loadBlit();
-        DefaultShaders.loadDefaultShaders();
-        Material.loadMissingMaterial();
-
-//        this.assetLoader = new AssetLoader("./assets/");
         this.assetManager = new AssetManager();
         this.assetManager.registerLoader(Model.class, new ModelLoader(assetManager));
         this.assetManager.registerLoader(ByteBuffer.class, new RawLoader());
@@ -254,7 +246,15 @@ public class Game {
         this.assetManager.registerLoader(String.class, new StringLoader());
         this.assetManager.registerLoader(Sound.class, new SoundLoader());
 
-        glCreateQueries(GL_TIME_ELAPSED, passQueries);
+        GPUTexture.loadMissingTexture(assetManager);
+        GPUTexture.loadBlit();
+        DefaultShaders.loadDefaultShaders();
+        Material.loadMissingMaterial();
+
+        for (int i = 0; i < passQueries.length; i++) {
+            passQueries[i] = new Query(Query.QueryTarget.TIME_ELAPSED);
+            passQueries[i].label(intToPassName(i) + " Time Elapsed Query");
+        }
 
         try {
             pauseScreen = new PauseScreen(window, assetManager);
@@ -274,25 +274,25 @@ public class Game {
         gBufferBlit.link();
         gBufferBlit.label("GBuffer Blit Program");
 
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_position"), 0);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_normal"), 1);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_color"), 2);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_material"), 3);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("gbuffer_depth"), 4);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("shadow_blue_noise"), 5);
-        glProgramUniform1i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("shadow_depth"), 6);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("gbuffer_position"), 0);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("gbuffer_normal"), 1);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("gbuffer_color"), 2);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("gbuffer_material"), 3);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("gbuffer_depth"), 4);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("shadow_blue_noise"), 5);
+        gBufferBlit.uniform1i(gBufferBlit.getUniformLocation("shadow_depth"), 6);
 
-        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_diffuse"), 0);
-        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_roughness"), 1);
-        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_metallic"), 2);
-        glProgramUniform1i(DefaultShaders.GBUFFER.handle(), DefaultShaders.GBUFFER.getUniformLocation("texture_normal"), 3);
+        DefaultShaders.GBUFFER.uniform1i(DefaultShaders.GBUFFER.getUniformLocation("texture_diffuse"), 0);
+        DefaultShaders.GBUFFER.uniform1i(DefaultShaders.GBUFFER.getUniformLocation("texture_roughness"), 1);
+        DefaultShaders.GBUFFER.uniform1i(DefaultShaders.GBUFFER.getUniformLocation("texture_metallic"), 2);
+        DefaultShaders.GBUFFER.uniform1i(DefaultShaders.GBUFFER.getUniformLocation("texture_normal"), 3);
 
-        glProgramUniform1i(post.handle(), post.getUniformLocation("img_texture"), 0);
-        glProgramUniform1i(post.handle(), post.getUniformLocation("depth_texture"), 1);
-        glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_position"), 2);
-        glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_normal"), 3);
-        glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_material"), 4);
-        glProgramUniform1i(post.handle(), post.getUniformLocation("blue_noise"), 5);
+        post.uniform1i(post.getUniformLocation("img_texture"), 0);
+        post.uniform1i(post.getUniformLocation("depth_texture"), 1);
+        post.uniform1i(post.getUniformLocation("gbuffer_position"), 2);
+        post.uniform1i(post.getUniformLocation("gbuffer_normal"), 3);
+        post.uniform1i(post.getUniformLocation("gbuffer_material"), 4);
+        post.uniform1i(post.getUniformLocation("blue_noise"), 5);
 
         textRenderer = new TextRenderer(window.width(), window.height());
 
@@ -304,16 +304,16 @@ public class Game {
         quad.label("GBuffer Quad");
 
         finalFramebuffer = new GPUFramebuffer(window.width(), window.height(), (fb, w, h) -> {
-            imgTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            imgTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             imgTexture.storage(1, GL_RGBA16F, w, h);
-            glTextureParameteri(imgTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(imgTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            imgTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            imgTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             imgTexture.label("Final Color Texture");
 
-            imgDepthTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            imgDepthTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             imgDepthTexture.storage(1, GL_DEPTH24_STENCIL8, w, h);
-            glTextureParameteri(imgDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(imgDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            imgDepthTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            imgDepthTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             imgDepthTexture.label("Final Depth Texture");
 
             fb.texture(imgTexture, GL_COLOR_ATTACHMENT0, 0);
@@ -326,34 +326,34 @@ public class Game {
         });
 
         gFramebuffer = new GPUFramebuffer(window.width(), window.height(), (fb, w, h) -> {
-            gBufferPositionTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferPositionTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             gBufferPositionTexture.storage(1, GL_RGBA16F, w, h);
-            glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gBufferPositionTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferPositionTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            gBufferPositionTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             gBufferPositionTexture.label("GBuffer Position Texture");
 
-            gBufferNormalTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferNormalTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             gBufferNormalTexture.storage(1, GL_RGBA16F, w, h);
-            glTextureParameteri(gBufferNormalTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gBufferNormalTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferNormalTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            gBufferNormalTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             gBufferNormalTexture.label("GBuffer Normal Texture");
 
-            gBufferColorTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferColorTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             gBufferColorTexture.storage(1, GL_RGBA8, w, h);
-            glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gBufferColorTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferColorTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            gBufferColorTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             gBufferColorTexture.label("GBuffer Color Texture");
 
-            gBufferMaterialTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferMaterialTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             gBufferMaterialTexture.storage(1, GL_RGBA16F, w, h);
-            glTextureParameteri(gBufferMaterialTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gBufferMaterialTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferMaterialTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            gBufferMaterialTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             gBufferMaterialTexture.label("GBuffer Material Texture");
 
-            gBufferDepthTexture = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D);
+            gBufferDepthTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
             gBufferDepthTexture.storage(1, GL_DEPTH24_STENCIL8, w, h);
-            glTextureParameteri(gBufferDepthTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTextureParameteri(gBufferDepthTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gBufferDepthTexture.minFilter(GPUTexture.MinFilter.NEAREST);
+            gBufferDepthTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             gBufferDepthTexture.label("GBuffer Depth Texture");
 
             fb.texture(gBufferPositionTexture, GL_COLOR_ATTACHMENT0, 0);
@@ -373,8 +373,8 @@ public class Game {
         gFramebuffer.label("GBuffer");
 
         shadowBlueNoiseTexture = assetManager.loadSync(new AssetIdentifier("bluenoise.png"), GPUTexture.class).get();
-        glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTextureParameteri(shadowBlueNoiseTexture.handle(), GL_TEXTURE_WRAP_T, GL_REPEAT);
+        shadowBlueNoiseTexture.wrapS(GPUTexture.Wrap.REPEAT);
+        shadowBlueNoiseTexture.wrapT(GPUTexture.Wrap.REPEAT);
 
         LevelLoader loader = new LevelLoader(assetManager);
         this.level = loader.load(physics, ResourceHelper.loadFileContentsFromResource("example_level.json5"));
@@ -390,10 +390,10 @@ public class Game {
                 (float) Math.toRadians(60f),
                 (float) window.width() / window.height(),
                 0.01f,
-                100f
+                1000f
         );
         clusteredShading = new ClusteredShading(level);
-        shadowManager = new ShadowManager(camera, shadowResolution, 4);
+        shadowManager = new ShadowManager(camera, shadowResolution, 4, 250f, 0.7f);
         frustumCulling = new FrustumCulling(shadowManager, level.skylight(), shadowResolution, camera);
 
         font = new Font(ResourceHelper.loadFileFromResource("Nunito.ttf"), 512, 1, 1024, 1024);
@@ -513,12 +513,12 @@ public class Game {
             post.link();
             post.label("Post Program");
 
-            glProgramUniform1i(post.handle(), post.getUniformLocation("img_texture"), 0);
-            glProgramUniform1i(post.handle(), post.getUniformLocation("depth_texture"), 1);
-            glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_position"), 2);
-            glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_normal"), 3);
-            glProgramUniform1i(post.handle(), post.getUniformLocation("gbuffer_material"), 4);
-            glProgramUniform1i(post.handle(), post.getUniformLocation("blue_noise"), 5);
+            post.uniform1i(post.getUniformLocation("img_texture"), 0);
+            post.uniform1i(post.getUniformLocation("depth_texture"), 1);
+            post.uniform1i(post.getUniformLocation("gbuffer_position"), 2);
+            post.uniform1i(post.getUniformLocation("gbuffer_normal"), 3);
+            post.uniform1i(post.getUniformLocation("gbuffer_material"), 4);
+            post.uniform1i(post.getUniformLocation("blue_noise"), 5);
         }
 
         if (!paused) {
@@ -536,132 +536,122 @@ public class Game {
         this.culling().update();
 
         for (int i = 0; i < passQueries.length; i++) {
-            if (Util.isQueryReady(passQueries[i])) {
-                this.passTimes[i] = Util.getQueryTime(passQueries[i]);
+            if (passQueries[i].isResultAvailable()) {
+                passTimes[i] = passQueries[i].getResult64();
             }
         }
     }
 
     private void renderShadowPass(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 1, "Shadow Pass");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[0]);
+        try (Query.QueryCloser _ = passQueries[0].begin()) {
+            this.shadowManager.bindFramebuffer();
 
-        this.shadowManager.bindFramebuffer();
+            glFrontFace(GL_CCW);
+            glCullFace(GL_BACK);
 
-        glFrontFace(GL_CCW);
-        glCullFace(GL_BACK);
+            glEnable(GL_CULL_FACE);
+            glEnable(GL_DEPTH_TEST);
 
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_DEPTH_TEST);
+            culling().shadow(true);
+            shadowManager.prepareShadowPass();
+            shadowManager.bindUniforms(null, ShadowManager.getShadowView(this.level.skylight()));
+            level.render(delta);
+            shadowManager.finishShadowPass();
+            culling().shadow(false);
 
-        culling().shadow(true);
-        shadowManager.prepareShadowPass();
-        shadowManager.bindUniforms(null, ShadowManager.getShadowView(this.level.skylight()));
-        level.render(delta);
-        shadowManager.finishShadowPass();
-        culling().shadow(false);
-
-        glDisable(GL_CULL_FACE);
-        glDisable(GL_DEPTH_TEST);
-
-        glEndQuery(GL_TIME_ELAPSED);
+            glDisable(GL_CULL_FACE);
+            glDisable(GL_DEPTH_TEST);
+        }
         glPopDebugGroup();
     }
 
     private void renderGBufferPass(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 3, "GBuffer Pass");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[1]);
+        try (Query.QueryCloser _ = passQueries[1].begin()) {
+            glViewport(0, 0, window.width(), window.height());
+            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            gFramebuffer.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glViewport(0,0,window.width(),window.height());
-        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-        gFramebuffer.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glFrontFace(GL_CCW);
+            glCullFace(GL_BACK);
 
-        glFrontFace(GL_CCW);
-        glCullFace(GL_BACK);
+            glEnable(GL_CULL_FACE);
+            glEnable(GL_DEPTH_TEST);
 
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_DEPTH_TEST);
+            camera.bind(0);
+            level.render(delta);
 
-        camera.bind(0);
-        level.render(delta);
-
-        glDisable(GL_CULL_FACE);
-        glDisable(GL_DEPTH_TEST);
-
-        glEndQuery(GL_TIME_ELAPSED);
+            glDisable(GL_CULL_FACE);
+            glDisable(GL_DEPTH_TEST);
+        }
         glPopDebugGroup();
     }
 
     private void renderGBufferBlit(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 4, "GBuffer Blit");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[2]);
+        try (Query.QueryCloser _ = passQueries[2].begin()) {
+            gFramebuffer.unbind();
 
-        gFramebuffer.unbind();
+            finalFramebuffer.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        finalFramebuffer.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        camera.bind(0);
-        level.pbrUniformBuffer().bind(1);
-        level.lightSSBO().bind(2);
-        clusteredShading.clusterGridSSBO().bind(3);
-        gBufferBlit.use();
-        glBindTextureUnit(0, gBufferPositionTexture.handle());
-        glBindTextureUnit(1, gBufferNormalTexture.handle());
-        glBindTextureUnit(2, gBufferColorTexture.handle());
-        glBindTextureUnit(3, gBufferMaterialTexture.handle());
-        glBindTextureUnit(4, gBufferDepthTexture.handle());
-        glBindTextureUnit(5, shadowBlueNoiseTexture.handle());
-        glBindTextureUnit(6, this.shadowManager.texture().handle());
-        glProgramUniform1f(gBufferBlit.handle(), gBufferBlit.getUniformLocation("z_near"), camera.near());
-        glProgramUniform1f(gBufferBlit.handle(), gBufferBlit.getUniformLocation("z_far"), camera.far());
-        glProgramUniform3i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("grid_size"), ClusteredShading.GRID_SIZE_X, ClusteredShading.GRID_SIZE_Y, ClusteredShading.GRID_SIZE_Z);
-        glProgramUniform2i(gBufferBlit.handle(), gBufferBlit.getUniformLocation("screen_dimensions"), window.width(), window.height());
-        shadowManager.bindUniforms(gBufferBlit, ShadowManager.getShadowView(this.level.skylight()));
-        quad.draw();
-        gFramebuffer.copyDepthToBuffer(finalFramebuffer, this.window.width(), this.window.height());
-
-        glEndQuery(GL_TIME_ELAPSED);
+            camera.bind(0);
+            level.pbrUniformBuffer().bind(1);
+            level.lightSSBO().bind(2);
+            clusteredShading.clusterGridSSBO().bind(3);
+            gBufferBlit.use();
+            gBufferPositionTexture.bindToUnit(0);
+            gBufferNormalTexture.bindToUnit(1);
+            gBufferColorTexture.bindToUnit(2);
+            gBufferMaterialTexture.bindToUnit(3);
+            gBufferDepthTexture.bindToUnit(4);
+            shadowBlueNoiseTexture.bindToUnit(5);
+            shadowManager.texture().bindToUnit(6);
+            gBufferBlit.uniform1f(gBufferBlit.getUniformLocation("z_near"), camera.near());
+            gBufferBlit.uniform1f(gBufferBlit.getUniformLocation("z_far"), camera.far());
+            gBufferBlit.uniform3i(gBufferBlit.getUniformLocation("grid_size"), ClusteredShading.GRID_SIZE_X, ClusteredShading.GRID_SIZE_Y, ClusteredShading.GRID_SIZE_Z);
+            gBufferBlit.uniform2i(gBufferBlit.getUniformLocation("screen_dimensions"), window.width(), window.height());
+            shadowManager.bindUniforms(gBufferBlit, ShadowManager.getShadowView(this.level.skylight()));
+            quad.draw();
+            gFramebuffer.copyDepthToBuffer(finalFramebuffer, this.window.width(), this.window.height());
+        }
         glPopDebugGroup();
     }
 
     private void renderForwardPass(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 6, "Forward Pass");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[3]);
+        try (Query.QueryCloser _ = passQueries[3].begin()) {
+            glEnable(GL_CULL_FACE);
+            glEnable(GL_DEPTH_TEST);
 
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_DEPTH_TEST);
+            // render
 
-        // render
-
-        glDisable(GL_CULL_FACE);
-        glDisable(GL_DEPTH_TEST);
-
-        glEndQuery(GL_TIME_ELAPSED);
+            glDisable(GL_CULL_FACE);
+            glDisable(GL_DEPTH_TEST);
+        }
         glPopDebugGroup();
     }
 
     private void renderPost(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 5, "Post");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[4]);
+        try (Query.QueryCloser _ = passQueries[4].begin()) {
+            gFramebuffer.unbind();
 
-        gFramebuffer.unbind();
-
-        camera.bind(0);
-        post.use();
-        glBindTextureUnit(0, imgTexture.handle());
-        glBindTextureUnit(1, imgDepthTexture.handle());
-        glBindTextureUnit(2, gBufferPositionTexture.handle());
-        glBindTextureUnit(3, gBufferNormalTexture.handle());
-        glBindTextureUnit(4, gBufferMaterialTexture.handle());
-        glBindTextureUnit(5, shadowBlueNoiseTexture.handle());
-        glProgramUniform1i(post.handle(), post.getUniformLocation("tonemap_mode"), tonemapMode);
-        glProgramUniform2i(post.handle(), post.getUniformLocation("screen_size"), this.window.width(), this.window.height());
-        glProgramUniform1f(post.handle(), post.getUniformLocation("z_near"), this.camera.near());
-        glProgramUniform1f(post.handle(), post.getUniformLocation("z_far"), this.camera.far());
-        quad.draw();
-        finalFramebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
-
-        glEndQuery(GL_TIME_ELAPSED);
+            camera.bind(0);
+            post.use();
+            imgTexture.bindToUnit(0);
+            imgDepthTexture.bindToUnit(1);
+            gBufferPositionTexture.bindToUnit(2);
+            gBufferNormalTexture.bindToUnit(3);
+            gBufferMaterialTexture.bindToUnit(4);
+            shadowBlueNoiseTexture.bindToUnit(5);
+            post.uniform1i(post.getUniformLocation("tonemap_mode"), tonemapMode);
+            post.uniform2i(post.getUniformLocation("screen_size"), this.window.width(), this.window.height());
+            post.uniform1f(post.getUniformLocation("z_near"), this.camera.near());
+            post.uniform1f(post.getUniformLocation("z_far"), this.camera.far());
+            quad.draw();
+            finalFramebuffer.copyDepthToBackBuffer(this.window.width(), this.window.height());
+        }
         glPopDebugGroup();
     }
 
@@ -681,88 +671,89 @@ public class Game {
     float[] gain = new float[]{1.0f};
     private void renderImGui() {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 7, "ImGui Pass");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[6]);
-        imGuiGl3.newFrame();
-        imGuiGlfw.newFrame();
-        ImGui.newFrame();
+        try (Query.QueryCloser _ = passQueries[6].begin()) {
+            imGuiGl3.newFrame();
+            imGuiGlfw.newFrame();
+            ImGui.newFrame();
 
-        ImGuiViewport viewport = ImGui.getMainViewport();
+            ImGuiViewport viewport = ImGui.getMainViewport();
 
-        int flags = ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoNavFocus | ImGuiWindowFlags.NoBackground;
+            int flags = ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoNavFocus | ImGuiWindowFlags.NoBackground;
 
-        ImGui.setNextWindowPos(viewport.getPos());
-        ImGui.setNextWindowSize(viewport.getSize());
-        ImGui.setNextWindowViewport(viewport.getID());
+            ImGui.setNextWindowPos(viewport.getPos());
+            ImGui.setNextWindowSize(viewport.getSize());
+            ImGui.setNextWindowViewport(viewport.getID());
 
-        ImGui.pushStyleVar(ImGuiStyleVar.WindowRounding, 0.0f);
-        ImGui.pushStyleVar(ImGuiStyleVar.WindowBorderSize, 0.0f);
-        ImGui.begin("dockspace", null, flags);
-        ImGui.popStyleVar(2);
+            ImGui.pushStyleVar(ImGuiStyleVar.WindowRounding, 0.0f);
+            ImGui.pushStyleVar(ImGuiStyleVar.WindowBorderSize, 0.0f);
+            ImGui.begin("dockspace", null, flags);
+            ImGui.popStyleVar(2);
 
-        int id = ImGui.getID("mydockspace");
-        ImGui.dockSpace(id, new ImVec2(0, 0), ImGuiDockNodeFlags.PassthruCentralNode);
+            int id = ImGui.getID("mydockspace");
+            ImGui.dockSpace(id, new ImVec2(0, 0), ImGuiDockNodeFlags.PassthruCentralNode);
 
-        ImGui.end();
+            ImGui.end();
 
-        if (ImGui.begin("Settings", ImGuiWindowFlags.AlwaysAutoResize)) {
-            ImGui.sliderFloat("Gain", gain, 0, 1);
-            if (ImGui.isItemDeactivatedAfterEdit()) {
-                this.soundManager.masterGain(gain[0]);
+            if (ImGui.begin("Settings", ImGuiWindowFlags.AlwaysAutoResize)) {
+                ImGui.sliderFloat("Gain", gain, 0, 1);
+                if (ImGui.isItemDeactivatedAfterEdit()) {
+                    this.soundManager.masterGain(gain[0]);
+                }
             }
+            ImGui.end();
+
+            ImGui.render();
+            imGuiGl3.renderDrawData(ImGui.getDrawData());
+
+            if (ImGui.getIO().hasConfigFlags(ImGuiConfigFlags.ViewportsEnable)) {
+                if (overlayEnabled && renderDoc != null)
+                    renderDoc.maskOverlayBits(RenderDoc.OverlayBits.NONE.bits(), RenderDoc.OverlayBits.NONE.bits());
+                final long backupCurrentContext = GLFW.glfwGetCurrentContext();
+                ImGui.updatePlatformWindows();
+                ImGui.renderPlatformWindowsDefault();
+                GLFW.glfwMakeContextCurrent(backupCurrentContext);
+                if (overlayEnabled && renderDoc != null)
+                    renderDoc.maskOverlayBits(RenderDoc.OverlayBits.DEFAULT.bits(), RenderDoc.OverlayBits.DEFAULT.bits());
+            }
+
         }
-        ImGui.end();
-
-        ImGui.render();
-        imGuiGl3.renderDrawData(ImGui.getDrawData());
-
-        if (ImGui.getIO().hasConfigFlags(ImGuiConfigFlags.ViewportsEnable)) {
-            if (overlayEnabled && renderDoc != null) renderDoc.maskOverlayBits(RenderDoc.OverlayBits.NONE.bits(), RenderDoc.OverlayBits.NONE.bits());
-            final long backupCurrentContext = GLFW.glfwGetCurrentContext();
-            ImGui.updatePlatformWindows();
-            ImGui.renderPlatformWindowsDefault();
-            GLFW.glfwMakeContextCurrent(backupCurrentContext);
-            if (overlayEnabled && renderDoc != null) renderDoc.maskOverlayBits(RenderDoc.OverlayBits.DEFAULT.bits(), RenderDoc.OverlayBits.DEFAULT.bits());
-        }
-
-        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
     }
 
     private void renderUi(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 6, "UI Pass");
-        glBeginQuery(GL_TIME_ELAPSED, passQueries[5]);
+        try (Query.QueryCloser _ = passQueries[5].begin()) {
+            glEnable(GL_DEPTH_TEST);
+            this.level.scene().renderDebug(this.camera); // this is done here because it renders into the back-buffer, bypassing post-processing.
+            glDisable(GL_DEPTH_TEST);
 
-        glEnable(GL_DEPTH_TEST);
-        this.level.scene().renderDebug(this.camera); // this is done here because it renders into the backbuffer, bypassing post-processing.
-        glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            float textScale = 1f / 3f;
+            textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 3 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+            textRenderer.drawText(font, this.window.inputSequenceHandler().getDebugSequence(), 5f, this.window.height() - 4 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+            player.renderDebug(textRenderer, 5f, this.window.height() - 5 * (this.font.lineHeight() * textScale), textScale, delta);
 
-        float textScale = 1f / 3f;
-        textRenderer.drawText(font, String.format("FPS: %.2f", framerate), 5f, this.window.height() - 3 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
-        textRenderer.drawText(font, this.window.inputSequenceHandler().getDebugSequence(), 5f, this.window.height() - 4 * (font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
-        player.renderDebug(textRenderer, 5f, this.window.height() - 5 * (this.font.lineHeight() * textScale), textScale, delta);
+            for (int i = 0; i < passQueries.length; i++) {
+                textRenderer.drawText(font, String.format("Pass %s took %.3fms", intToPassName(i), ((float) this.passTimes[i] / 1e6)), 5f, this.window.height() - (8 + i) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+            }
 
-        for (int i = 0; i < passQueries.length; i++) {
-            textRenderer.drawText(font, String.format("Pass %s took %.3fms", intToPassName(i), ((float)this.passTimes[i] / 1e6)), 5f, this.window.height() - (8 + i) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+            textRenderer.drawText(font, String.format("Clustered gathering took %.3fms", ((float) clusteredShading.gatherTimeNs() / 1e6)), 5f, this.window.height() - (8 + passQueries.length) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+            textRenderer.drawText(font, String.format("Clustered culling took %.3fms", ((float) clusteredShading.cullTimeNs() / 1e6)), 5f, this.window.height() - (9 + passQueries.length) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
+
+            if (currentScreen != null) {
+                currentScreen.render(delta);
+            }
+
+            glDisable(GL_BLEND);
         }
-
-        textRenderer.drawText(font, String.format("Clustered gathering took %.3fms", ((float)clusteredShading.gatherTimeNs() / 1e6)), 5f, this.window.height() - (8 + passQueries.length) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
-        textRenderer.drawText(font, String.format("Clustered culling took %.3fms", ((float)clusteredShading.cullTimeNs() / 1e6)), 5f, this.window.height() - (9 + passQueries.length) * (this.font.lineHeight() * textScale), textScale, new Vector3f(1.0f, 0.0f, 0.0f));
-
-        if (currentScreen != null) {
-            currentScreen.render(delta);
-        }
-
-        glDisable(GL_BLEND);
-        glEndQuery(GL_TIME_ELAPSED);
         glPopDebugGroup();
     }
 
     private void render(double delta) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, "Frame");
-        glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // backbuffer color is bright fucking red so that we know when the framebuffer isn't drawing properly
+        glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // back-buffer color is bright fucking red so that we know when the framebuffer isn't drawing properly
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderShadowPass(delta);

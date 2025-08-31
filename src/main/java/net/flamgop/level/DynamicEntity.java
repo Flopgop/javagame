@@ -5,7 +5,7 @@ import net.flamgop.asset.AssetManager;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.model.Model;
-import net.flamgop.gpu.uniform.ModelUniformData;
+import net.flamgop.gpu.data.ModelUniformData;
 import net.flamgop.level.json.JsonDynamicEntity;
 import net.flamgop.physics.Physics;
 import net.flamgop.physics.PhysicsScene;

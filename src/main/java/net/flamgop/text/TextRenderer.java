@@ -31,11 +31,11 @@ public class TextRenderer {
         textShader.link();
         textShader.label("Text Program");
 
-        textColorUniformLocation = glGetUniformLocation(textShader.handle(), "text_color");
-        textProjectionUniformLocation = glGetUniformLocation(textShader.handle(), "projection");
+        textColorUniformLocation = textShader.getUniformLocation("text_color");
+        textProjectionUniformLocation = textShader.getUniformLocation("projection");
 
         projection.ortho(0, width, 0, height, 0f, 1f);
-        glProgramUniformMatrix4fv(textShader.handle(), textProjectionUniformLocation, false, projection.get(new float[16]));
+        textShader.uniformMatrix4fv(textProjectionUniformLocation, false, projection);
 
         unitQuad = new VertexArray();
         unitQuad.data(new float[]{
@@ -61,9 +61,8 @@ public class TextRenderer {
     }
 
     public void resize(int width, int height) {
-        textShader.use();
         projection.identity().ortho(0, width, 0, height, 0f, 1f);
-        glUniformMatrix4fv(textProjectionUniformLocation, false, projection.get(new float[16]));
+        textShader.uniformMatrix4fv(textProjectionUniformLocation, false, projection);
     }
 
     private float addCharacterToBuffer(Font font, char c, float x, float y, float scale, FloatBuffer buffer) {
@@ -109,9 +108,9 @@ public class TextRenderer {
     // this avoids safety checks for speed reasons
     public void drawBufferedText(Font font, FloatBuffer buffer, Vector3f color) {
         textShader.use();
-        glUniform3f(textColorUniformLocation, color.x, color.y, color.z);
+        textShader.uniform3f(textColorUniformLocation, color);
         glBindVertexArray(unitQuad.handle());
-        glBindTextureUnit(0, font.atlas().handle());
+        font.atlas().bindToUnit(0);
         textUVBuffer.allocate(buffer);
         glDrawElementsInstanced(GL_TRIANGLES, unitQuad.indexCount(), GL_UNSIGNED_INT, 0, buffer.remaining() / FLOATS_PER_INSTANCE);
         glBindVertexArray(0);

@@ -5,11 +5,13 @@
       <w>gbuffer</w>
       <w>instanceable</w>
       <w>joml</w>
+      <w>lerp</w>
       <w>mousebind</w>
       <w>mousebinds</w>
       <w>nunito</w>
       <w>ortho</w>
       <w>quaternionf</w>
+      <w>raycast</w>
       <w>renderbuffers</w>
       <w>renderdoc</w>
       <w>rmluicore</w>

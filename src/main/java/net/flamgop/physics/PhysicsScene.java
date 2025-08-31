@@ -2,13 +2,16 @@ package net.flamgop.physics;
 
 import net.flamgop.gpu.Camera;
 import net.flamgop.gpu.ShaderProgram;
+import net.flamgop.util.PhysxJoml;
 import net.flamgop.util.ResourceHelper;
+import org.joml.Vector3f;
 import physx.PxTopLevelFunctions;
 import physx.character.PxControllerManager;
 import physx.common.*;
-import physx.physics.PxActor;
-import physx.physics.PxScene;
+import physx.physics.*;
 import physx.support.PxVisualizationParameterEnum;
+
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -39,6 +42,52 @@ public class PhysicsScene {
 
     public float gravity() {
         return gravity;
+    }
+
+    public RaycastHit raycast(Vector3f start, Vector3f direction, float maxDistance) {
+        PxHitFlags hitFlags = new PxHitFlags((short) PxHitFlagEnum.eDEFAULT.value);
+        PxFilterData filterData = new PxFilterData();
+        filterData.setWord0(CollisionFlags.RAYCAST.flag());
+        filterData.setWord1(CollisionFlags.ALL.flag());
+        PxQueryFlags queryFlags = new PxQueryFlags((short) (PxQueryFlagEnum.eSTATIC.value | PxQueryFlagEnum.eDYNAMIC.value));
+        PxQueryFilterData queryFilterData = new PxQueryFilterData();
+        queryFilterData.setData(filterData);
+        queryFilterData.setFlags(queryFlags);
+        PxVec3 origin = PhysxJoml.toPxVec3(start);
+        PxVec3 dir = PhysxJoml.toPxVec3(direction);
+        dir.normalize();
+
+        PxRaycastBuffer10 raycastBuffer = new PxRaycastBuffer10();
+        boolean hit = this.scene.raycast(origin, dir, maxDistance, raycastBuffer, hitFlags, queryFilterData);
+
+        PxRaycastHit closest = null;
+        if (raycastBuffer.getNbAnyHits() > 0) {
+            closest = raycastBuffer.getAnyHit(0);
+            for (int i = 1; i < raycastBuffer.getNbAnyHits(); i++) {
+                PxRaycastHit next = raycastBuffer.getAnyHit(i);
+                if (closest.getDistance() > next.getDistance()) {
+                    closest = next;
+                }
+            }
+        }
+
+        RaycastHit result = new RaycastHit(
+                hit && closest != null,
+                hit && closest != null ? new RaycastHit.RaycastData(
+                        closest.getActor(),
+                        PhysxJoml.toVector3f(closest.getPosition()),
+                        PhysxJoml.toVector3f(closest.getNormal())
+                ) : null
+        );
+
+        raycastBuffer.destroy();
+        origin.destroy();
+        dir.destroy();
+        queryFilterData.destroy();
+        queryFlags.destroy();
+        filterData.destroy();
+        hitFlags.destroy();
+        return result;
     }
 
     public void gravity(float gravity) {

@@ -87,18 +87,15 @@ public class CascadedShadowMaps {
         float texelSizeX = width / (float) resolution;
         float texelSizeY = height / (float) resolution;
 
-        float centerX = (min.x + max.x) * 0.5f;
-        float centerY = (min.y + max.y) * 0.5f;
+        float snappedMinX = (float)Math.floor(min.x / texelSizeX) * texelSizeX;
+        float snappedMinY = (float)Math.floor(min.y / texelSizeY) * texelSizeY;
 
-        float snappedCenterX = (float) (Math.floor(centerX / texelSizeX) * texelSizeX);
-        float snappedCenterY = (float) (Math.floor(centerY / texelSizeY) * texelSizeY);
+        float snappedMaxX = snappedMinX + width;
+        float snappedMaxY = snappedMinY + height;
 
-        float halfW = width * 0.5f;
-        float halfH = height * 0.5f;
-
-        min.x = snappedCenterX - halfW;
-        max.x = snappedCenterX + halfW;
-        min.y = snappedCenterY - halfH;
-        max.y = snappedCenterY + halfH;
+        min.x = snappedMinX;
+        max.x = snappedMaxX;
+        min.y = snappedMinY;
+        max.y = snappedMaxY;
     }
 }

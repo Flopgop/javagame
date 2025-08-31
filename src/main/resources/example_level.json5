@@ -10,18 +10,18 @@
       "position": [0,0,0],
       "rotation": [0,0,0,1],
       "collision": "ground.obj",
-      "collides_with_flag": 0xFFFFFFFF,
+      "collides_with_flag": 0x07,
       "collision_group": 0x01
     },
-    {
-      "id": "statue",
-      "model": "statue.glb",
-      "position": [0,0,0],
-      "rotation": [0,0,0,1],
-      "collision": "statue_collision.obj",
-      "collides_with_flag": 0xFFFFFFFF,
-      "collision_group": 0x01
-    }
+//    {
+//      "id": "statue",
+//      "model": "statue.glb",
+//      "position": [0,0,0],
+//      "rotation": [0,0,0,1],
+//      "collision": "statue_collision.obj",
+//      "collides_with_flag": 0x07,
+//      "collision_group": 0x01
+//    }
   ],
   "dynamic": [
     {

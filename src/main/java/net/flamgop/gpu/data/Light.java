@@ -1,4 +1,4 @@
-package net.flamgop.gpu.uniform;
+package net.flamgop.gpu.data;
 
 import net.flamgop.gpu.buffer.BufferSerializable;
 import org.joml.Vector3f;

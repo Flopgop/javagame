@@ -2,9 +2,11 @@ package net.flamgop;
 
 import net.flamgop.gpu.Camera;
 import net.flamgop.input.InputState;
+import net.flamgop.math.MathHelper;
 import net.flamgop.physics.CollisionFlags;
 import net.flamgop.physics.Physics;
 import net.flamgop.physics.PhysicsScene;
+import net.flamgop.physics.RaycastHit;
 import net.flamgop.text.TextRenderer;
 import net.flamgop.util.PhysxJoml;
 import org.joml.Vector2f;
@@ -57,6 +59,13 @@ public class Player {
         }
     }
 
+    private static final float FOV = 60.0f;
+    private static final float SPRINT_FOV = 75.0f;
+
+    private static final float NORMAL_HEIGHT = 1.0f;
+    private static final float CROUCH_HEIGHT = 0.55f;
+    private static final float SLIDING_HEIGHT = 0.35f;
+
     private final Camera camera;
     private final PxVec3 temp = new PxVec3();
     private final InputState inputState;
@@ -71,6 +80,8 @@ public class Player {
     private final float sensitivity = 0.5f;
     private final float crouchingSpeed = 2.5f;
     private final float speed = 5.0f;
+    private final float sprintSpeed = 10.0f;
+    private final float slidingSpeed = 10.0f;
     private final float jumpForce = 8f;
     private final float gravity;
 
@@ -81,6 +92,19 @@ public class Player {
 
     private boolean fly = false;
     private boolean crouching = false;
+    private boolean sprinting = false;
+
+    private final Vector3f slideDirection = new Vector3f();
+    private boolean shouldSlide = false;
+    private float currentSlidingSpeed = 0f;
+
+    private float currentFOV = (float) Math.toRadians(FOV);
+    private float targetFOV = currentFOV;
+
+    private float currentPlayerHeight = 1.0f;
+    private float targetPlayerHeight = currentPlayerHeight;
+
+    private RaycastHit hit;
 
     public Player(Physics physics, PhysicsScene scene, Camera camera, InputState inputState) {
         this.camera = camera;
@@ -148,12 +172,61 @@ public class Player {
         if (inputState.isKeyDown(GLFW.GLFW_KEY_D)) movementVector.add(right);
         if (inputState.isKeyDown(GLFW.GLFW_KEY_A)) movementVector.sub(right);
 
-        if (movementVector.lengthSquared() > 0.0001f)
+        boolean isMoving = movementVector.lengthSquared() > 0.0001f;
+        if (isMoving)
             movementVector.normalize();
 
-        movementVector.mul(crouching ? crouchingSpeed : speed);
+        if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) && !crouching) {
+            if (!sprinting && isMoving) {
+                sprinting = true;
+                targetFOV = (float) Math.toRadians(SPRINT_FOV);
+            } else if (sprinting && !isMoving) {
+                sprinting = false;
+                targetFOV = (float) Math.toRadians(FOV);
+            }
+        } else {
+            if (sprinting) {
+                if (crouching && onGround) {
+                    shouldSlide = true;
+                    if (isMoving) {
+                        slideDirection.set(movementVector);
+                    } else {
+                        Vector3f fwd = camera.forward();
+                        fwd.y = 0;
+                        fwd.normalize();
+                        slideDirection.set(fwd);
+                    }
+                    currentSlidingSpeed = slidingSpeed;
+                    targetPlayerHeight = SLIDING_HEIGHT;
+                }
+                targetFOV = (float) Math.toRadians(FOV);
+                sprinting = false;
+            }
+        }
 
-        velocity.add(movementVector);
+        Vector3f acceleration;
+        if (shouldSlide) {
+            targetPlayerHeight = SLIDING_HEIGHT;
+            acceleration = new Vector3f(slideDirection).mul(currentSlidingSpeed);
+            currentSlidingSpeed = MathHelper.conditionalLerp(currentSlidingSpeed, 0f, (float)delta, onGround ? 1f : 0.2f, 0.5f);
+            if (!crouching) {
+                shouldSlide = false;
+                targetPlayerHeight = NORMAL_HEIGHT;
+            }
+            if (currentSlidingSpeed == 0) {
+                shouldSlide = false;
+                targetPlayerHeight = CROUCH_HEIGHT;
+            }
+        } else {
+            float movementSpeed;
+            if (crouching) movementSpeed = crouchingSpeed;
+            else if (sprinting) movementSpeed = sprintSpeed;
+            else movementSpeed = speed;
+
+            acceleration = movementVector.mul(movementSpeed);
+        }
+
+        velocity.add(acceleration);
 
         if (!onGround && !fly)
             velocity.add(0, (float) (gravity * delta),0);
@@ -169,16 +242,20 @@ public class Player {
 
             if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
                 if (!crouching) {
-                    controller.resize(0.5f);
+                    targetPlayerHeight = CROUCH_HEIGHT;
                     crouching = true;
                 }
             } else {
                 if (crouching) {
-                    controller.resize(1.0f);
+                    targetPlayerHeight = NORMAL_HEIGHT;
                     crouching = false;
                 }
             }
         } else {
+            if (crouching) {
+                targetPlayerHeight = NORMAL_HEIGHT;
+                crouching = false;
+            }
             if (inputState.isKeyDown(GLFW.GLFW_KEY_SPACE)) {
                 velocity.setComponent(1, speed);
             } else if (inputState.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
@@ -198,7 +275,7 @@ public class Player {
 
         state.destroy();
 
-        camera.position(new Vector3f((float) controller.getPosition().getX(), (float) (controller.getPosition().getY() + 0.25f), (float) controller.getPosition().getZ()));
+        this.hit = this.scene.raycast(this.camera.position(), this.camera.forward(), 100f);
     }
 
     public void update(double delta) {
@@ -226,6 +303,16 @@ public class Player {
         if (inputState.wasKeyPressed(GLFW.GLFW_KEY_F)) {
             this.noclip();
         }
+
+        float prevCurrentFOV = currentFOV;
+        currentFOV = MathHelper.conditionalLerp(currentFOV, targetFOV, (float) delta, 5.0f);
+        if (prevCurrentFOV != currentFOV) camera.fov(currentFOV);
+
+        float prevCurrentPlayerHeight = currentPlayerHeight;
+        currentPlayerHeight = MathHelper.conditionalLerp(currentPlayerHeight, targetPlayerHeight, (float) delta, 10.0f);
+        if (prevCurrentPlayerHeight != currentPlayerHeight) controller.resize(currentPlayerHeight);
+
+        camera.position(new Vector3f((float) controller.getPosition().getX(), (float) (controller.getPosition().getY() + 0.25f), (float) controller.getPosition().getZ()));
     }
 
 
@@ -238,10 +325,18 @@ public class Player {
     } // do nothing for now?
 
     public void renderDebug(TextRenderer textRenderer, float x, float y, float scale, double delta) {
-        textRenderer.drawText(
-                Game.INSTANCE.font(),
-                String.format("Position: %.2f %.2f %.2f\nVelocity: %.2f %.2f %.2f\nOnGround: %s", positionView.x(), positionView.y(), positionView.z(), velocity.x(), velocity.y(), velocity.z(), this.onGround ? "true" : "false"),
-                x, y, scale, new Vector3f(1.0f, 0.0f, 0.0f)
-        );
+        if (hit != null && hit.hit() && hit.data() != null) { // if the second is true the third is always true, but my editor will warn me if I don't add it anyway.
+            textRenderer.drawText(
+                    Game.INSTANCE.font(),
+                    String.format("Position: %.2f %.2f %.2f Raycast Hit: %.2f %.2f %.2f\nVelocity: %.2f %.2f %.2f\nOnGround: %s", positionView.x(), positionView.y(), positionView.z(), hit.data().position().x(), hit.data().position().y(), hit.data().position().z(), velocity.x(), velocity.y(), velocity.z(), this.onGround ? "true" : "false"),
+                    x, y, scale, new Vector3f(1.0f, 0.0f, 0.0f)
+            );
+        } else {
+            textRenderer.drawText(
+                    Game.INSTANCE.font(),
+                    String.format("Position: %.2f %.2f %.2f\nVelocity: %.2f %.2f %.2f\nOnGround: %s", positionView.x(), positionView.y(), positionView.z(), velocity.x(), velocity.y(), velocity.z(), this.onGround ? "true" : "false"),
+                    x, y, scale, new Vector3f(1.0f, 0.0f, 0.0f)
+            );
+        }
     }
 }

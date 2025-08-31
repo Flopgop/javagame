@@ -158,6 +158,7 @@ float shadow_factor(vec3 world_pos, vec3 normal, int cascade) {
     float current_depth = sc.z - bias;
 
     float shadow = 0.0;
+
     float texelScale = 1.5; // tweak for softness
     vec2 texelSize = 1.0 / vec2(textureSize(shadow_depth, 0).xy) * texelScale;
 
@@ -246,7 +247,7 @@ vec3 calculate_sun_contribution(vec3 direction, vec3 light_color, vec3 color, ve
 void main() {
     vec3 color = texture(gbuffer_color, fs_in.texcoord).rgb;
     vec3 normal = normalize(texture(gbuffer_normal, fs_in.texcoord).xyz);
-    vec3 position = texture(gbuffer_position, fs_in.texcoord).rgb;
+    vec3 position = texture(gbuffer_position, fs_in.texcoord).rgb + cam_in.camera_pos;
     float depth = texture(gbuffer_depth, fs_in.texcoord).r;
 
     vec4 material = texture(gbuffer_material, fs_in.texcoord);
@@ -265,7 +266,7 @@ void main() {
 
     uint z_tile = uint((log(abs(view_space_position.z) / z_near) * grid_size.z) / log(z_far / z_near));
     vec2 tile_size = screen_dimensions / grid_size.xy;
-    uvec3 tile = uvec3(gl_FragCoord.xy / tile_size, z_tile);
+    uvec3 tile = uvec3(fs_in.texcoord.xy / tile_size, z_tile);
     uint tile_index = tile.x + (tile.y * grid_size.x) + (tile.z * grid_size.x * grid_size.y);
 
     uint light_count = clusters[tile_index].count;
@@ -289,9 +290,10 @@ void main() {
         }
     }
 
-    float shadow = shadow_factor(position, normal, cascade);
-    float levels = 4.0;
-    shadow = floor(shadow * levels) / levels;
+    float shadow = mix(shadow_factor(position, normal, cascade), 1.0, float(cascade >= NUM_CASCADES));
+    // this is a stylistic remnant of when my shadows were lower resolution, at the higher resolutions CSM provides it just looks tacky or cheap.
+//    float levels = 4.0;
+//    shadow = floor(shadow * levels) / levels;
     lighting += shadow * calculate_sun_contribution(sunDir, sunColor, color, position, V, N, F0, roughness, metallic);
 
     // calculate reflected light because of the sky rendering here

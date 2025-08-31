@@ -1,6 +1,8 @@
 #version 430 core
 
 #define LOCAL_SIZE 128
+#define LIGHT_COUNT 128
+
 layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 struct Light {
@@ -20,7 +22,7 @@ struct Cluster
     vec4 minPoint;
     vec4 maxPoint;
     uint count;
-    uint lightIndices[128];
+    uint lightIndices[LIGHT_COUNT];
 };
 
 layout(std430, binding = 1) restrict buffer ClusterBuffer
@@ -50,7 +52,7 @@ void main()
 
     for (uint i = 0; i < lightCount; ++i)
     {
-        if (testSphereAABB(i, cluster) && cluster.count < 100)
+        if (testSphereAABB(i, cluster) && cluster.count < LIGHT_COUNT)
         {
             cluster.lightIndices[cluster.count] = i;
             cluster.count++;

@@ -1,6 +1,5 @@
 package net.flamgop.shadow;
 
-import net.flamgop.Game;
 import net.flamgop.gpu.Camera;
 import net.flamgop.gpu.GPUFramebuffer;
 import net.flamgop.gpu.GPUTexture;
@@ -16,7 +15,6 @@ import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
-import java.util.Arrays;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -27,16 +25,28 @@ public class ShadowManager {
 
     private final Camera camera;
 
-    private final float lambda = 0.6f;
+    private final float lambda;
+    private final float shadowFar;
 
     private final int cascadeCount;
     private final int largestCascadeResolution;
     private final GPUFramebuffer shadowFramebuffer;
     private GPUTexture cascades;
 
-    public ShadowManager(Camera camera, int resolution, int cascadeCount) {
+    /**
+     * fancy, fancy
+     *
+     * @param camera whatever camera you want to render shadows from
+     * @param resolution shadowmap resolution
+     * @param cascadeCount num cascades (note: more is not always better)
+     * @param shadowFar far plane for the cascades (you don't need shadows 1000 meters away if your camera far plane is 1000 meters away.)
+     * @param lambda split between linear and logarithmic cascade splits
+     */
+    public ShadowManager(Camera camera, int resolution, int cascadeCount, float shadowFar, float lambda) {
         this.camera = camera;
         this.cascadeCount = cascadeCount;
+        this.shadowFar = shadowFar;
+        this.lambda = lambda;
         this.largestCascadeResolution = resolution;
         shadowShaderProgram = new ShaderProgram();
         shadowShaderProgram.attachShaderSource("Shadow Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.vertex.glsl"), GL_VERTEX_SHADER);
@@ -46,12 +56,12 @@ public class ShadowManager {
         depthOnlyMaterial = new Material(shadowShaderProgram);
 
         shadowFramebuffer = new GPUFramebuffer(resolution, resolution, (fb, w, h) -> {
-            cascades = new GPUTexture(GPUTexture.TextureTarget.TEXTURE_2D_ARRAY); // this is cursed lmao
+            cascades = new GPUTexture(GPUTexture.Target.TEXTURE_2D_ARRAY); // this is cursed lmao
             cascades.storage(1, GL_DEPTH_COMPONENT32F, w, h, cascadeCount);
-            glTextureParameteri(cascades.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTextureParameteri(cascades.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameteri(cascades.handle(), GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-            glTextureParameteri(cascades.handle(), GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+            cascades.minFilter(GPUTexture.MinFilter.LINEAR);
+            cascades.magFilter(GPUTexture.MagFilter.LINEAR);
+            cascades.compareMode(GPUTexture.CompareMode.COMPARE_REF_TO_TEXTURE);
+            cascades.compareFunc(GPUTexture.CompareFunc.LEQUAL);
 
             cascades.label("Shadow Depth Texture Array");
 
@@ -87,12 +97,11 @@ public class ShadowManager {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             if (shaderProgram == null) shaderProgram = shadowShaderProgram;
             FloatBuffer matrixBuffer = stack.callocFloat(16);
-            float[] splits = CascadedShadowMaps.computeCascadeSplits(cascadeCount, camera.near(), camera.far(), lambda);
+            float[] splits = CascadedShadowMaps.computeCascadeSplits(cascadeCount, camera.near(), shadowFar, lambda);
             Matrix4f[] cascades = CascadedShadowMaps.computeCascadeMatrices(camera, lightView, this.cascadeCount, this.largestCascadeResolution, splits);
             for (int i = 0; i < cascadeCount; i++) {
-                glProgramUniform1f(shaderProgram.handle(), shaderProgram.getUniformLocation("cascade_distances[" + i + "]"), splits[i + 1]);
-                glProgramUniformMatrix4fv(shaderProgram.handle(), shaderProgram.getUniformLocation("cascade_matrices[" + i + "]"), false, cascades[i].get(matrixBuffer));
-                matrixBuffer.clear();
+                shaderProgram.uniform1f(shaderProgram.getUniformLocation("cascade_distances[" + i + "]"), splits[i + 1]);
+                shaderProgram.uniformMatrix4fv(shaderProgram.getUniformLocation("cascade_matrices[" + i + "]"), false, cascades[i], matrixBuffer);
             }
         }
     }

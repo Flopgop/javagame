@@ -57,7 +57,7 @@ uniform float z_far; // camera far
 uniform sampler2D img_texture; // fully rendered screen in HDR, not tonemapped.
 uniform sampler2D depth_texture; // depth, not linear
 
-uniform sampler2D gbuffer_position; // x,y,z in worldspace
+uniform sampler2D gbuffer_position; // x,y,z in worldspace - camera_pos
 uniform sampler2D gbuffer_normal; // normal in worldspace
 uniform sampler2D gbuffer_material; // r = roughness, g = metallic
 
@@ -75,5 +75,5 @@ void main() {
     float depth = texture(depth_texture, fs_in.texcoord).r;
     vec3 color = texture(img_texture, fs_in.texcoord).rgb;
 
-    frag_color = vec4(tonemap(tonemap_mode, color), 1.0);
+    frag_color = vec4(tonemap(tonemap_mode, color * contact_shadow), 1.0);
 }
