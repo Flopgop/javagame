@@ -8,14 +8,35 @@ import static org.lwjgl.opengl.GL46.*;
 
 public class ShaderProgram {
 
+    private static final ThreadLocal<float[]> matrix2x2AcquisitionFloatBuffer = ThreadLocal.withInitial(() -> new float[2*2]);
+    private static final ThreadLocal<float[]> matrix3x3AcquisitionFloatBuffer = ThreadLocal.withInitial(() -> new float[3*3]);
+    private static final ThreadLocal<float[]> matrix4x4AcquisitionFloatBuffer = ThreadLocal.withInitial(() -> new float[4*4]);
+    private static final ThreadLocal<float[]> matrix3x2AcquisitionFloatBuffer = ThreadLocal.withInitial(() -> new float[3*2]);
+    private static final ThreadLocal<float[]> matrix4x3AcquisitionFloatBuffer = ThreadLocal.withInitial(() -> new float[4*3]);
+
+    public enum ShaderType {
+        COMPUTE(GL_COMPUTE_SHADER),
+        VERTEX(GL_VERTEX_SHADER),
+        TESS_CONTROL(GL_TESS_CONTROL_SHADER),
+        TESS_EVALUATION(GL_TESS_EVALUATION_SHADER),
+        GEOMETRY(GL_GEOMETRY_SHADER),
+        FRAGMENT(GL_FRAGMENT_SHADER),
+
+        ;
+        final int glQualifier;
+        ShaderType(final int glQualifier) {
+            this.glQualifier = glQualifier;
+        }
+    }
+
     private final int handle;
 
     public ShaderProgram() {
         this.handle = glCreateProgram();
     }
 
-    public void attachShaderSource(String name, String shaderSource, int shaderType) {
-        int shader = glCreateShader(shaderType);
+    public void attachShaderSource(String name, String shaderSource, ShaderType shaderType) {
+        int shader = glCreateShader(shaderType.glQualifier);
         glShaderSource(shader, shaderSource);
         glCompileShader(shader);
         if (glGetShaderi(shader, GL_COMPILE_STATUS) == GL_FALSE) {
@@ -125,7 +146,7 @@ public class ShaderProgram {
         glProgramUniform3iv(handle, location, v);
     }
 
-    public void uniform4fiv(int location, int[] v) {
+    public void uniform4iv(int location, int[] v) {
         glProgramUniform4iv(handle, location, v);
     }
 
@@ -146,15 +167,25 @@ public class ShaderProgram {
     }
 
     public void uniformMatrix2fv(int location, boolean transpose, Matrix2f mat) {
-        glProgramUniformMatrix2fv(handle, location, transpose, mat.get(new float[2*2]));
+        glProgramUniformMatrix2fv(handle, location, transpose, mat.get(matrix2x2AcquisitionFloatBuffer.get()));
+    }
+
+    public void uniformMatrix2fv(int location, boolean transpose, Matrix2f mat, FloatBuffer buffer) {
+        glProgramUniformMatrix2fv(handle, location, transpose, mat.get(buffer));
+        buffer.clear();
     }
 
     public void uniformMatrix3fv(int location, boolean transpose, Matrix3f mat) {
-        glProgramUniformMatrix3fv(handle, location, transpose, mat.get(new float[3*3]));
+        glProgramUniformMatrix3fv(handle, location, transpose, mat.get(matrix3x3AcquisitionFloatBuffer.get()));
+    }
+
+    public void uniformMatrix3fv(int location, boolean transpose, Matrix3f mat, FloatBuffer buffer) {
+        glProgramUniformMatrix3fv(handle, location, transpose, mat.get(buffer));
+        buffer.clear();
     }
 
     public void uniformMatrix4fv(int location, boolean transpose, Matrix4f mat) {
-        glProgramUniformMatrix4fv(handle, location, transpose, mat.get(new float[4*4]));
+        glProgramUniformMatrix4fv(handle, location, transpose, mat.get(matrix4x4AcquisitionFloatBuffer.get()));
     }
 
     public void uniformMatrix4fv(int location, boolean transpose, Matrix4f mat, FloatBuffer buffer) {
@@ -163,11 +194,21 @@ public class ShaderProgram {
     }
 
     public void uniformMatrix3x2fv(int location, boolean transpose, Matrix3x2f matrix) {
-        glProgramUniformMatrix3x2fv(handle, location, transpose, matrix.get(new float[3*2]));
+        glProgramUniformMatrix3x2fv(handle, location, transpose, matrix.get(matrix3x2AcquisitionFloatBuffer.get()));
+    }
+
+    public void uniformMatrix3x2fv(int location, boolean transpose, Matrix3x2f matrix, FloatBuffer buffer) {
+        glProgramUniformMatrix3x2fv(handle, location, transpose, matrix.get(buffer));
+        buffer.clear();
     }
 
     public void uniformMatrix4x3fv(int location, boolean transpose, Matrix4x3f matrix) {
-        glProgramUniformMatrix4x3fv(handle, location, transpose, matrix.get(new float[4*3]));
+        glProgramUniformMatrix4x3fv(handle, location, transpose, matrix.get(matrix4x3AcquisitionFloatBuffer.get()));
+    }
+
+    public void uniformMatrix4x3fv(int location, boolean transpose, Matrix4x3f matrix, FloatBuffer buffer) {
+        glProgramUniformMatrix4x3fv(handle, location, transpose, matrix.get(buffer));
+        buffer.clear();
     }
 
     public void label(String label) {

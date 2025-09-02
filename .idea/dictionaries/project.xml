@@ -2,6 +2,8 @@
   <dictionary name="project">
     <words>
       <w>avformat</w>
+      <w>bgra</w>
+      <w>bptc</w>
       <w>gbuffer</w>
       <w>instanceable</w>
       <w>joml</w>
@@ -14,11 +16,13 @@
       <w>raycast</w>
       <w>renderbuffers</w>
       <w>renderdoc</w>
+      <w>rgtc</w>
       <w>rmluicore</w>
       <w>shadowmap</w>
       <w>ssbo</w>
       <w>texcoord</w>
       <w>tonemap</w>
+      <w>unorm</w>
       <w>valvesoftware</w>
     </words>
   </dictionary>

@@ -141,20 +141,20 @@ public class PhysicsScene {
 
         pointsProgram = new ShaderProgram();
         // this uses a custom vertex for gl_PointSize
-        pointsProgram.attachShaderSource("Points Debug Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/physx_debug_points.vertex.glsl"), GL_VERTEX_SHADER);
-        pointsProgram.attachShaderSource("Points Debug Fragment Shader", fragment, GL_FRAGMENT_SHADER);
+        pointsProgram.attachShaderSource("Points Debug Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/physx_debug_points.vertex.glsl"), ShaderProgram.ShaderType.VERTEX);
+        pointsProgram.attachShaderSource("Points Debug Fragment Shader", fragment, ShaderProgram.ShaderType.FRAGMENT);
         pointsProgram.link();
         pointsProgram.label("Points Debug Program");
 
         linesProgram = new ShaderProgram();
-        linesProgram.attachShaderSource("Lines Debug Vertex Shader", vertex, GL_VERTEX_SHADER);
-        linesProgram.attachShaderSource("Lines Debug Fragment Shader", fragment, GL_FRAGMENT_SHADER);
+        linesProgram.attachShaderSource("Lines Debug Vertex Shader", vertex, ShaderProgram.ShaderType.VERTEX);
+        linesProgram.attachShaderSource("Lines Debug Fragment Shader", fragment, ShaderProgram.ShaderType.FRAGMENT);
         linesProgram.link();
         linesProgram.label("Lines Debug Program");
 
         trianglesProgram = new ShaderProgram();
-        trianglesProgram.attachShaderSource("Triangles Debug Vertex Shader", vertex, GL_VERTEX_SHADER);
-        trianglesProgram.attachShaderSource("Triangles Debug Fragment Shader", fragment, GL_FRAGMENT_SHADER);
+        trianglesProgram.attachShaderSource("Triangles Debug Vertex Shader", vertex, ShaderProgram.ShaderType.VERTEX);
+        trianglesProgram.attachShaderSource("Triangles Debug Fragment Shader", fragment, ShaderProgram.ShaderType.FRAGMENT);
         trianglesProgram.link();
         trianglesProgram.label("Triangles Debug Program");
 

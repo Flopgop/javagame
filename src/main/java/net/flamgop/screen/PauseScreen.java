@@ -2,7 +2,7 @@ package net.flamgop.screen;
 
 import net.flamgop.Game;
 import net.flamgop.asset.*;
-import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.texture.GPUTexture;
 import net.flamgop.gpu.Window;
 import net.flamgop.screen.widget.TexturedWidget;
 import org.joml.Vector2f;

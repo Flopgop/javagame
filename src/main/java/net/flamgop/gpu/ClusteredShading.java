@@ -4,7 +4,6 @@ import net.flamgop.Game;
 import net.flamgop.gpu.buffer.BufferSerializable;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;
-import net.flamgop.level.Level;
 import net.flamgop.util.ResourceHelper;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -59,7 +58,7 @@ public class ClusteredShading {
     private final ShaderProgram cullLightsProgram;
     private final ShaderStorageBuffer clusterGridSSBO;
 
-    private final Level level;
+    private final ShaderStorageBuffer lightSSBO;
 
     private final Query gatherQuery;
     private final Query cullQuery;
@@ -67,14 +66,14 @@ public class ClusteredShading {
     private long gatherTimeNs;
     private long cullTimeNs;
 
-    public ClusteredShading(Level level) {
+    public ClusteredShading(ShaderStorageBuffer lightSSBO) {
         gatherClustersProgram = new ShaderProgram();
-        gatherClustersProgram.attachShaderSource("Gather Clusters Compute Shader", ResourceHelper.loadFileContentsFromResource("shaders/gather_clusters.compute.glsl"), GL_COMPUTE_SHADER);
+        gatherClustersProgram.attachShaderSource("Gather Clusters Compute Shader", ResourceHelper.loadFileContentsFromResource("shaders/gather_clusters.compute.glsl"), ShaderProgram.ShaderType.COMPUTE);
         gatherClustersProgram.link();
         gatherClustersProgram.label("Gather Clusters Program");
 
         cullLightsProgram = new ShaderProgram();
-        cullLightsProgram.attachShaderSource("Cull Lights Compute Shader", ResourceHelper.loadFileContentsFromResource("shaders/cull_lights.compute.glsl"), GL_COMPUTE_SHADER);
+        cullLightsProgram.attachShaderSource("Cull Lights Compute Shader", ResourceHelper.loadFileContentsFromResource("shaders/cull_lights.compute.glsl"), ShaderProgram.ShaderType.COMPUTE);
         cullLightsProgram.link();
         cullLightsProgram.label("Cull Lights Program");
 
@@ -82,7 +81,7 @@ public class ClusteredShading {
         clusterGridSSBO.buffer().allocate(Cluster.BYTES * NUM_CLUSTERS);
         clusterGridSSBO.buffer().label("Cluster Grid SSBO");
 
-        this.level = level;
+        this.lightSSBO = lightSSBO;
 
         this.gatherQuery = new Query(Query.QueryTarget.TIME_ELAPSED);
         this.cullQuery = new Query(Query.QueryTarget.TIME_ELAPSED);
@@ -112,7 +111,7 @@ public class ClusteredShading {
         int width = Game.INSTANCE.window().width();
         int height = Game.INSTANCE.window().height();
 
-        try (Query.QueryCloser _ = gatherQuery.begin()) {
+        try (Query.QueryEnder _ = gatherQuery.begin()) {
             gatherClustersProgram.use();
             clusterGridSSBO.bind(1);
             gatherClustersProgram.uniform1f(gatherClustersProgram.getUniformLocation("zNear"), camera.near());
@@ -124,11 +123,11 @@ public class ClusteredShading {
             glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
-        try (Query.QueryCloser _ = cullQuery.begin()) {
+        try (Query.QueryEnder _ = cullQuery.begin()) {
             cullLightsProgram.use();
             clusterGridSSBO.bind(1);
-            level.lightSSBO().bind(2);
-            gatherClustersProgram.uniformMatrix4fv(cullLightsProgram.getUniformLocation("viewMatrix"), false, camera.view());
+            lightSSBO.bind(2);
+            cullLightsProgram.uniformMatrix4fv(cullLightsProgram.getUniformLocation("viewMatrix"), false, camera.view());
 
             glDispatchCompute(27, 1, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);

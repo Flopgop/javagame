@@ -1,6 +1,10 @@
 package net.flamgop.text;
 
-import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.DataType;
+import net.flamgop.gpu.state.PixelStore;
+import net.flamgop.gpu.state.StateManager;
+import net.flamgop.gpu.texture.GPUTexture;
+import net.flamgop.gpu.texture.TextureFormat;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 import org.lwjgl.PointerBuffer;
@@ -14,18 +18,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL11.GL_LINEAR;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_S;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
-import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
-import static org.lwjgl.opengl.GL30.GL_R8;
-import static org.lwjgl.opengl.GL45.glTextureParameteri;
-import static org.lwjgl.opengl.GL45.glTextureSubImage2D;
 
 public class Font {
 
@@ -67,12 +59,12 @@ public class Font {
         generateAtlas(glyphCount, characterPadding);
 
         textAtlasTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
-        textAtlasTexture.storage(1, GL_R8, textAtlasWidth, textAtlasHeight);
-        glTextureSubImage2D(textAtlasTexture.handle(), 0, 0, 0, textAtlasWidth, textAtlasHeight, GL_RED, GL_UNSIGNED_BYTE, textAtlasBuffer);
-        glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(textAtlasTexture.handle(), GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        textAtlasTexture.storage(1, TextureFormat.R8, textAtlasWidth, textAtlasHeight);
+        textAtlasTexture.subimage(0, 0, 0, textAtlasWidth, textAtlasHeight, TextureFormat.RED, DataType.UNSIGNED_BYTE, textAtlasBuffer);
+        textAtlasTexture.minFilter(GPUTexture.MinFilter.LINEAR);
+        textAtlasTexture.magFilter(GPUTexture.MagFilter.LINEAR);
+        textAtlasTexture.wrapS(GPUTexture.Wrap.CLAMP_TO_EDGE);
+        textAtlasTexture.wrapT(GPUTexture.Wrap.CLAMP_TO_EDGE);
         textAtlasTexture.label(typeface.family_nameString() + " Text Atlas Texture");
 
         FT_Size_Metrics metrics = typeface.size().metrics();
@@ -93,7 +85,7 @@ public class Font {
         int y = 0;
         int rowHeight = 0;
 
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        StateManager.pixelStorei(PixelStore.UNPACK_ALIGNMENT, 1);
         for (char c = 0; c < glyphCount; c++) {
             if (FreeType.FT_Load_Char(typeface, c, FreeType.FT_LOAD_RENDER) != 0) {
                 throw new IllegalStateException("Couldn't load char " + c);

@@ -1,7 +1,7 @@
 package net.flamgop.gpu.model;
 
 import net.flamgop.gpu.DefaultShaders;
-import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.texture.GPUTexture;
 import net.flamgop.gpu.ShaderProgram;
 
 import java.util.ArrayList;

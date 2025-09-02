@@ -1,16 +1,23 @@
-package net.flamgop.gpu;
+package net.flamgop.gpu.texture;
 
 import net.flamgop.Game;
 import net.flamgop.asset.AssetIdentifier;
 import net.flamgop.asset.AssetManager;
+import net.flamgop.gpu.DataType;
+import net.flamgop.gpu.ShaderProgram;
 import net.flamgop.gpu.buffer.GPUBuffer;
+import net.flamgop.gpu.vertex.Attribute;
+import net.flamgop.gpu.vertex.VertexArray;
+import net.flamgop.gpu.vertex.VertexFormat;
 import net.flamgop.util.ResourceHelper;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.Buffer;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
 import static org.lwjgl.opengl.GL46.*;
@@ -19,20 +26,21 @@ public class GPUTexture {
 
     public enum Target {
         TEXTURE_1D(GL_TEXTURE_1D),
-        TEXTURE_2D(GL_TEXTURE_2D),
-        TEXTURE_3D(GL_TEXTURE_3D),
-        TEXTURE_RECTANGLE(GL_TEXTURE_RECTANGLE),
-        TEXTURE_BUFFER(GL_TEXTURE_BUFFER),
-        TEXTURE_CUBE_MAP(GL_TEXTURE_CUBE_MAP),
         TEXTURE_1D_ARRAY(GL_TEXTURE_1D_ARRAY),
+        TEXTURE_2D(GL_TEXTURE_2D),
         TEXTURE_2D_ARRAY(GL_TEXTURE_2D_ARRAY),
-        TEXTURE_CUBE_MAP_ARRAY(GL_TEXTURE_CUBE_MAP_ARRAY),
         TEXTURE_2D_MULTISAMPLE(GL_TEXTURE_2D_MULTISAMPLE),
         TEXTURE_2D_MULTISAMPLE_ARRAY(GL_TEXTURE_2D_MULTISAMPLE_ARRAY),
+        TEXTURE_3D(GL_TEXTURE_3D),
+        TEXTURE_BUFFER(GL_TEXTURE_BUFFER),
+        TEXTURE_CUBE_MAP(GL_TEXTURE_CUBE_MAP),
+        TEXTURE_CUBE_MAP_ARRAY(GL_TEXTURE_CUBE_MAP_ARRAY),
+        TEXTURE_RECTANGLE(GL_TEXTURE_RECTANGLE),
 
         ;
 
         final int glQualifier;
+
         Target(int glQualifier) {
             this.glQualifier = glQualifier;
         }
@@ -59,17 +67,18 @@ public class GPUTexture {
     }
 
     public enum CompareFunc {
-        LEQUAL(GL_LEQUAL),
-        GEQUAL(GL_GEQUAL),
-        LESS(GL_LESS),
-        GREATER(GL_GREATER),
-        EQUAL(GL_EQUAL),
-        NOTEQUAL(GL_NOTEQUAL),
         ALWAYS(GL_ALWAYS),
+        EQUAL(GL_EQUAL),
+        GEQUAL(GL_GEQUAL),
+        GREATER(GL_GREATER),
+        LEQUAL(GL_LEQUAL),
+        LESS(GL_LESS),
         NEVER(GL_NEVER),
+        NOTEQUAL(GL_NOTEQUAL),
 
         ;
         final int glQualifier;
+
         CompareFunc(int glQualifier) {
             this.glQualifier = glQualifier;
         }
@@ -108,18 +117,20 @@ public class GPUTexture {
     }
 
     public enum MinFilter {
-        NEAREST(GL_NEAREST),
         LINEAR(GL_LINEAR),
-        NEAREST_MIPMAP_NEAREST(GL_NEAREST_MIPMAP_NEAREST),
-        LINEAR_MIPMAP_NEAREST(GL_LINEAR_MIPMAP_NEAREST),
-        NEAREST_MIPMAP_LINEAR(GL_NEAREST_MIPMAP_LINEAR),
         LINEAR_MIPMAP_LINEAR(GL_LINEAR_MIPMAP_LINEAR),
+        LINEAR_MIPMAP_NEAREST(GL_LINEAR_MIPMAP_NEAREST),
+        NEAREST(GL_NEAREST),
+        NEAREST_MIPMAP_LINEAR(GL_NEAREST_MIPMAP_LINEAR),
+        NEAREST_MIPMAP_NEAREST(GL_NEAREST_MIPMAP_NEAREST),
 
         ;
         final int glQualifier;
+
         MinFilter(int glQualifier) {
             this.glQualifier = glQualifier;
         }
+
         public static MinFilter wrap(int glQualifier) {
             return switch (glQualifier) {
                 case GL_NEAREST -> NEAREST;
@@ -152,18 +163,20 @@ public class GPUTexture {
     }
 
     public enum Swizzle {
-        RED(GL_RED),
-        GREEN(GL_GREEN),
-        BLUE(GL_BLUE),
         ALPHA(GL_ALPHA),
-        ZERO(GL_ZERO),
+        BLUE(GL_BLUE),
+        GREEN(GL_GREEN),
         ONE(GL_ONE),
+        RED(GL_RED),
+        ZERO(GL_ZERO),
 
         ;
         final int glQualifier;
+
         Swizzle(int glQualifier) {
             this.glQualifier = glQualifier;
         }
+
         public static Swizzle wrap(int glQualifier) {
             return switch (glQualifier) {
                 case GL_RED -> RED;
@@ -176,18 +189,21 @@ public class GPUTexture {
             };
         }
     }
+
     public enum Wrap {
-        CLAMP_TO_EDGE(GL_CLAMP_TO_EDGE),
         CLAMP_TO_BORDER(GL_CLAMP_TO_BORDER),
+        CLAMP_TO_EDGE(GL_CLAMP_TO_EDGE),
         MIRRORED_REPEAT(GL_MIRRORED_REPEAT),
-        REPEAT(GL_REPEAT),
         MIRROR_CLAMP_TO_EDGE(GL_MIRROR_CLAMP_TO_EDGE),
+        REPEAT(GL_REPEAT),
 
         ;
         final int glQualifier;
+
         Wrap(int glQualifier) {
             this.glQualifier = glQualifier;
         }
+
         public static Wrap wrap(int glQualifier) {
             return switch (glQualifier) {
                 case GL_CLAMP_TO_EDGE -> CLAMP_TO_EDGE;
@@ -210,37 +226,41 @@ public class GPUTexture {
         MISSING_NORMAL.label("Missing Normal");
     }
 
+    private static final VertexFormat ATLAS_VERTEX_FORMAT = new VertexFormat()
+            .attribute(0, Attribute.of(Attribute.Type.FLOAT, 2, false))
+            .attribute(1, Attribute.of(Attribute.Type.FLOAT, 2, false))
+            .attribute(2, Attribute.of(Attribute.Type.FLOAT, 4, false, 1, 1))
+            .attribute(3, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1))
+            .attribute(4, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1));
     private static VertexArray ATLAS_COMPATIBLE_UNIT_QUAD;
     private static ShaderProgram BLIT_SHADER;
     private static int PROJECTION_LOCATION;
     private static int TINT_LOCATION;
     private static GPUBuffer UV_BUFFER;
     public static void loadBlit() {
-        ATLAS_COMPATIBLE_UNIT_QUAD = new VertexArray();
-        ATLAS_COMPATIBLE_UNIT_QUAD.data(new float[]{
-                0, 1, 0, 0,
-                0, 0, 0, 1,
-                1, 0, 1, 1,
-                1, 1, 1, 0
-        }, 4 * Float.BYTES, new int[]{
-                0, 1, 2,
-                0, 2, 3
-        });
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            ByteBuffer vertices = MemoryUtil.memByteBuffer(stack.floats(
+                    0, 1, 0, 0,
+                    0, 0, 0, 1,
+                    1, 0, 1, 1,
+                    1, 1, 1, 0
+            ));
+            ByteBuffer indices = stack.bytes(new byte[]{0, 1, 2, 0, 2, 3}); // Why is there an array here? because java has no byte shorthand, and byte varargs do not make untyped ints into bytes.
 
-        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(0, 2, GL_FLOAT, false, 0);
-        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(1, 2, GL_FLOAT, false, 2 * Float.BYTES);
-        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(2, 4, GL_FLOAT, false, 0, 1, 1);
-        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(3, 2, GL_FLOAT, false, 4 * Float.BYTES, 1, 1);
-        ATLAS_COMPATIBLE_UNIT_QUAD.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
-        ATLAS_COMPATIBLE_UNIT_QUAD.label("Atlas Compatible Unit Quad");
+            ATLAS_COMPATIBLE_UNIT_QUAD = new VertexArray(ATLAS_VERTEX_FORMAT);
+            ATLAS_COMPATIBLE_UNIT_QUAD.data(vertices, 0, 0);
+            ATLAS_COMPATIBLE_UNIT_QUAD.elementData(indices, VertexArray.IndexType.UNSIGNED_BYTE, indices.capacity());
 
-        UV_BUFFER = new GPUBuffer(GPUBuffer.BufferUsage.DYNAMIC_DRAW);
-        UV_BUFFER.label("Blit Buffer");
-        ATLAS_COMPATIBLE_UNIT_QUAD.buffer(UV_BUFFER, 1, 0, 8 * Float.BYTES);
+            ATLAS_COMPATIBLE_UNIT_QUAD.label("Atlas Compatible Unit Quad");
+
+            UV_BUFFER = new GPUBuffer(GPUBuffer.BufferUsage.DYNAMIC_DRAW);
+            UV_BUFFER.label("Blit Buffer");
+            ATLAS_COMPATIBLE_UNIT_QUAD.buffer(UV_BUFFER, 1, 0);
+        }
 
         BLIT_SHADER = new ShaderProgram();
-        BLIT_SHADER.attachShaderSource("Blit Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/blit.vertex.glsl"), GL_VERTEX_SHADER);
-        BLIT_SHADER.attachShaderSource("Blit Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/blit.fragment.glsl"), GL_FRAGMENT_SHADER);
+        BLIT_SHADER.attachShaderSource("Blit Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/blit.vertex.glsl"), ShaderProgram.ShaderType.VERTEX);
+        BLIT_SHADER.attachShaderSource("Blit Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/blit.fragment.glsl"), ShaderProgram.ShaderType.FRAGMENT);
         BLIT_SHADER.link();
         BLIT_SHADER.label("Atlas Compatible Instanced Partial Blit Program");
 
@@ -463,7 +483,7 @@ public class GPUTexture {
     }
 
     public void blit(int atlasX, int atlasY, int atlasW, int atlasH, int x, int y, int w, int h, Vector3f tint) {
-        FloatBuffer buffer = MemoryUtil.memAllocFloat(8 * Float.BYTES);
+        FloatBuffer buffer = MemoryUtil.memAllocFloat(8);
         buffer.put(atlasX);
         buffer.put(atlasY);
         buffer.put(atlasW);
@@ -489,40 +509,40 @@ public class GPUTexture {
         glBindTextureUnit(0,0);
     }
 
-    public void storage(int levels, int color, int width) {
-        glTextureStorage1D(handle, levels, color, width);
+    public void storage(int level, TextureFormat color, int width) {
+        glTextureStorage1D(handle, level, color.glQualifier, width);
     }
 
-    public void storage(int levels, int color, int width, int height) {
-        glTextureStorage2D(handle, levels, color, width, height);
+    public void storage(int level, TextureFormat color, int width, int height) {
+        glTextureStorage2D(handle, level, color.glQualifier, width, height);
     }
 
-    public void storage(int levels, int color, int width, int height, int depth) {
-        glTextureStorage3D(handle, levels, color, width, height, depth);
+    public void storage(int level, TextureFormat color, int width, int height, int depth) {
+        glTextureStorage3D(handle, level, color.glQualifier, width, height, depth);
     }
 
-    public void subimage(int level, int xoffset, int width, int format, int type, long pixels) {
-        glTextureSubImage1D(this.handle, level, xoffset, width, format, type, pixels);
+    public void subimage(int level, int xoffset, int width, TextureFormat format, int type, long pixels) {
+        glTextureSubImage1D(this.handle, level, xoffset, width, format.glQualifier, type, pixels);
     }
 
-    public void subimage(int level, int xoffset, int yoffset, int width, int height, int format, int type, long pixels) {
-        glTextureSubImage2D(this.handle, level, xoffset, yoffset, width, height, format, type, pixels);
+    public void subimage(int level, int xoffset, int yoffset, int width, int height, TextureFormat format, DataType type, long pixels) {
+        glTextureSubImage2D(this.handle, level, xoffset, yoffset, width, height, format.glQualifier, type.glQualifier(), pixels);
     }
 
-    public void subimage(int level, int xoffset, int yoffset, int zoffset, int width, int height, int depth, int format, int type, long pixels) {
-        glTextureSubImage3D(this.handle, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels);
+    public void subimage(int level, int xoffset, int yoffset, int zoffset, int width, int height, int depth, TextureFormat format,  DataType type, long pixels) {
+        glTextureSubImage3D(this.handle, level, xoffset, yoffset, zoffset, width, height, depth, format.glQualifier, type.glQualifier(), pixels);
     }
 
-    public void subimage(int level, int xoffset, int width, int format, int type, Buffer pixels) {
-        glTextureSubImage1D(this.handle, level, xoffset, width, format, type, MemoryUtil.memAddress(pixels));
+    public void subimage(int level, int xoffset, int width, TextureFormat format, DataType type, Buffer pixels) {
+        glTextureSubImage1D(this.handle, level, xoffset, width, format.glQualifier, type.glQualifier(), MemoryUtil.memAddress(pixels));
     }
 
-    public void subimage(int level, int xoffset, int yoffset, int width, int height, int format, int type, Buffer pixels) {
-        glTextureSubImage2D(this.handle, level, xoffset, yoffset, width, height, format, type, MemoryUtil.memAddress(pixels));
+    public void subimage(int level, int xoffset, int yoffset, int width, int height, TextureFormat format, DataType type, Buffer pixels) {
+        glTextureSubImage2D(this.handle, level, xoffset, yoffset, width, height, format.glQualifier, type.glQualifier(), MemoryUtil.memAddress(pixels));
     }
 
-    public void subimage(int level, int xoffset, int yoffset, int zoffset, int width, int height, int depth, int format, int type, Buffer pixels) {
-        glTextureSubImage3D(this.handle, level, xoffset, yoffset, zoffset, width, height, depth, format, type, MemoryUtil.memAddress(pixels));
+    public void subimage(int level, int xoffset, int yoffset, int zoffset, int width, int height, int depth, TextureFormat format, DataType type, Buffer pixels) {
+        glTextureSubImage3D(this.handle, level, xoffset, yoffset, zoffset, width, height, depth, format.glQualifier, type.glQualifier(), MemoryUtil.memAddress(pixels));
     }
 
     public int handle() {

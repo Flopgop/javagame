@@ -1,6 +1,6 @@
 package net.flamgop.gpu.model;
 
-import net.flamgop.gpu.VertexArray;
+import net.flamgop.gpu.vertex.VertexArray;
 import net.flamgop.util.AABB;
 import org.joml.Vector3f;
 
@@ -52,7 +52,7 @@ public class TexturedMesh {
     public void draw() {
         if (!overrideMaterial || materialOverride == null) this.material.use();
         else materialOverride.use();
-        this.vao.draw();
+        this.vao.draw(VertexArray.DrawMode.TRIANGLES);
     }
 
     public void destroy() {

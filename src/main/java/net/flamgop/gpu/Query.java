@@ -4,7 +4,7 @@ import static org.lwjgl.opengl.GL46.*;
 
 public class Query {
 
-    public record QueryCloser(Query query) implements AutoCloseable {
+    public record QueryEnder(Query query) implements AutoCloseable {
         @Override
         public void close() {
             query.end();
@@ -43,9 +43,9 @@ public class Query {
         glObjectLabel(GL_QUERY, handle, label);
     }
 
-    public QueryCloser begin() {
+    public QueryEnder begin() {
         glBeginQuery(target.glQualifier, handle);
-        return new QueryCloser(this);
+        return new QueryEnder(this);
     }
 
     public void end() {

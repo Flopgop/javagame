@@ -2,9 +2,9 @@ package net.flamgop.asset.loaders;
 
 import net.flamgop.asset.*;
 import net.flamgop.gpu.DefaultShaders;
-import net.flamgop.gpu.GPUTexture;
-import net.flamgop.gpu.Vertex;
-import net.flamgop.gpu.VertexArray;
+import net.flamgop.gpu.texture.GPUTexture;
+import net.flamgop.gpu.vertex.DefaultVertex;
+import net.flamgop.gpu.vertex.VertexArray;
 import net.flamgop.gpu.model.Material;
 import net.flamgop.gpu.model.Model;
 import net.flamgop.gpu.model.TexturedMesh;
@@ -69,13 +69,13 @@ public class ModelLoader implements Loader<Model> {
     }
 
     private TexturedMesh processMesh(String basePath, AIMesh mesh, AIScene scene) {
-        List<Vertex> vertices = new ArrayList<>();
+        List<DefaultVertex> vertices = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
 
         float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE, minZ = Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
 
         for (int i = 0; i < mesh.mNumVertices(); i++) {
-            Vertex v = new Vertex();
+            DefaultVertex v = new DefaultVertex();
             AIVector3D vertex = mesh.mVertices().get(i);
             v.position(vertex.x(), vertex.y(), vertex.z());
             AIVector3D normal = mesh.mNormals().get(i);
@@ -113,7 +113,7 @@ public class ModelLoader implements Loader<Model> {
         }
 
         VertexArray vao = VertexArray.withDefaultVertexFormat(
-                vertices.toArray(new Vertex[0]),
+                vertices.toArray(new DefaultVertex[0]),
                 indices.stream().mapToInt(i -> i).toArray()
         );
 

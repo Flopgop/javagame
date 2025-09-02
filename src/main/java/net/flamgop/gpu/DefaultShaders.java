@@ -10,8 +10,8 @@ public class DefaultShaders {
 
     public static void loadDefaultShaders() {
         GBUFFER = new ShaderProgram();
-        GBUFFER.attachShaderSource("GBuffer Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/gbuffer.vertex.glsl"), GL_VERTEX_SHADER);
-        GBUFFER.attachShaderSource("GBuffer Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/gbuffer.fragment.glsl"), GL_FRAGMENT_SHADER);
+        GBUFFER.attachShaderSource("GBuffer Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/gbuffer.vertex.glsl"), ShaderProgram.ShaderType.VERTEX);
+        GBUFFER.attachShaderSource("GBuffer Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/gbuffer.fragment.glsl"), ShaderProgram.ShaderType.FRAGMENT);
         GBUFFER.link();
         GBUFFER.label("GBuffer Program");
     }

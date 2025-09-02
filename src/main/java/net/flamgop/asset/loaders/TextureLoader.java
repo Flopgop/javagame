@@ -2,7 +2,9 @@ package net.flamgop.asset.loaders;
 
 import net.flamgop.asset.AssetIdentifier;
 import net.flamgop.asset.Loader;
-import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.DataType;
+import net.flamgop.gpu.texture.GPUTexture;
+import net.flamgop.gpu.texture.TextureFormat;
 import net.flamgop.util.ResourceHelper;
 import org.lwjgl.assimp.AITexel;
 import org.lwjgl.assimp.AITexture;
@@ -12,8 +14,6 @@ import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-
-import static org.lwjgl.opengl.GL11.*;
 
 public class TextureLoader implements Loader<GPUTexture> {
     @Override
@@ -30,8 +30,8 @@ public class TextureLoader implements Loader<GPUTexture> {
             ByteBuffer out = STBImage.stbi_load_from_memory(data, x, y, channelsInFile, 4);
             if (out == null) throw new IllegalStateException("Bad texture data passed to loadFromBytes");
             int w = x.get(0), h = y.get(0);
-            texture.storage(1, GL_RGBA8, w, h);
-            texture.subimage(0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, out);
+            texture.storage(1, TextureFormat.RGBA8, w, h);
+            texture.subimage(0, 0, 0, w, h, TextureFormat.RGBA, DataType.UNSIGNED_BYTE, out);
             STBImage.stbi_image_free(out);
             texture.minFilter(GPUTexture.MinFilter.NEAREST);
             texture.magFilter(GPUTexture.MagFilter.NEAREST);
@@ -39,7 +39,7 @@ public class TextureLoader implements Loader<GPUTexture> {
         }
     }
 
-    public static GPUTexture loadFromRawBytes(ByteBuffer data, int color, int format, int type, int width, int height) {
+    public static GPUTexture loadFromRawBytes(ByteBuffer data, TextureFormat color, TextureFormat format, DataType type, int width, int height) {
         GPUTexture texture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
         texture.storage(1, color, width, height);
         texture.subimage(0, 0, 0, width, height, format, type, data);
@@ -59,7 +59,7 @@ public class TextureLoader implements Loader<GPUTexture> {
                 data.put(texel.a());
             }
             data.flip();
-            GPUTexture tex = loadFromRawBytes(data, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, texture.mWidth(), texture.mHeight());
+            GPUTexture tex = loadFromRawBytes(data, TextureFormat.RGBA8, TextureFormat.RGBA, DataType.UNSIGNED_BYTE, texture.mWidth(), texture.mHeight());
             MemoryUtil.memFree(data);
             return tex;
         } else {

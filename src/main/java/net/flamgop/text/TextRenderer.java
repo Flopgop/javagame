@@ -1,13 +1,17 @@
 package net.flamgop.text;
 
+import net.flamgop.gpu.vertex.Attribute;
+import net.flamgop.gpu.vertex.VertexFormat;
 import net.flamgop.util.ResourceHelper;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.ShaderProgram;
-import net.flamgop.gpu.VertexArray;
+import net.flamgop.gpu.vertex.VertexArray;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
 import static org.lwjgl.opengl.GL46.*;
@@ -15,6 +19,12 @@ import static org.lwjgl.opengl.GL46.*;
 public class TextRenderer {
 
     private static final int FLOATS_PER_INSTANCE = 8;
+    private static final VertexFormat VERTEX_FORMAT = new VertexFormat()
+            .attribute(0, Attribute.of(Attribute.Type.FLOAT, 2, false))
+            .attribute(1, Attribute.of(Attribute.Type.FLOAT, 2, false))
+            .attribute(2, Attribute.of(Attribute.Type.FLOAT, 4, false, 1, 1))
+            .attribute(3, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1))
+            .attribute(4, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1));
 
     private final VertexArray unitQuad;
     private final ShaderProgram textShader;
@@ -26,8 +36,8 @@ public class TextRenderer {
 
     public TextRenderer(int width, int height) {
         textShader = new ShaderProgram();
-        textShader.attachShaderSource("Text Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/text.vertex.glsl"), GL_VERTEX_SHADER);
-        textShader.attachShaderSource("Text Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/text.fragment.glsl"), GL_FRAGMENT_SHADER);
+        textShader.attachShaderSource("Text Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/text.vertex.glsl"), ShaderProgram.ShaderType.VERTEX);
+        textShader.attachShaderSource("Text Fragment Shader", ResourceHelper.loadFileContentsFromResource("shaders/text.fragment.glsl"), ShaderProgram.ShaderType.FRAGMENT);
         textShader.link();
         textShader.label("Text Program");
 
@@ -37,27 +47,26 @@ public class TextRenderer {
         projection.ortho(0, width, 0, height, 0f, 1f);
         textShader.uniformMatrix4fv(textProjectionUniformLocation, false, projection);
 
-        unitQuad = new VertexArray();
-        unitQuad.data(new float[]{
-                0, 1, 0, 0,
-                0, 0, 0, 1,
-                1, 0, 1, 1,
-                1, 1, 1, 0
-        }, 4 * Float.BYTES, new int[]{
-                0, 1, 2,
-                0, 2, 3
-        });
-
         textUVBuffer = new GPUBuffer(GPUBuffer.BufferUsage.DYNAMIC_DRAW);
         textUVBuffer.label("Text UV Buffer");
-        unitQuad.buffer(textUVBuffer, 1, 0, 8 * Float.BYTES);
 
-        unitQuad.attribute(0, 2, GL_FLOAT, false, 0);
-        unitQuad.attribute(1, 2, GL_FLOAT, false, 2 * Float.BYTES);
-        unitQuad.attribute(2, 4, GL_FLOAT, false, 0, 1, 1);
-        unitQuad.attribute(3, 2, GL_FLOAT, false, 4 * Float.BYTES, 1, 1);
-        unitQuad.attribute(4, 2, GL_FLOAT, false, 6 * Float.BYTES, 1, 1);
-        unitQuad.label("Text Quad");
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            ByteBuffer vertices = MemoryUtil.memByteBuffer(stack.floats(
+                    0, 1, 0, 0,
+                    0, 0, 0, 1,
+                    1, 0, 1, 1,
+                    1, 1, 1, 0
+            ));
+            ByteBuffer indices = stack.bytes(new byte[] {0, 1, 2, 0, 2, 3});
+
+            unitQuad = new VertexArray(VERTEX_FORMAT);
+            unitQuad.data(vertices, 0, 0);
+            unitQuad.elementData(indices, VertexArray.IndexType.UNSIGNED_BYTE, indices.capacity());
+
+            unitQuad.buffer(textUVBuffer, 1, 0);
+
+            unitQuad.label("Text Quad");
+        }
     }
 
     public void resize(int width, int height) {
@@ -109,19 +118,16 @@ public class TextRenderer {
     public void drawBufferedText(Font font, FloatBuffer buffer, Vector3f color) {
         textShader.use();
         textShader.uniform3f(textColorUniformLocation, color);
-        glBindVertexArray(unitQuad.handle());
         font.atlas().bindToUnit(0);
         textUVBuffer.allocate(buffer);
-        glDrawElementsInstanced(GL_TRIANGLES, unitQuad.indexCount(), GL_UNSIGNED_INT, 0, buffer.remaining() / FLOATS_PER_INSTANCE);
-        glBindVertexArray(0);
-        glBindTextureUnit(0, 0);
+        unitQuad.drawInstanced(VertexArray.DrawMode.TRIANGLES, buffer.remaining() / FLOATS_PER_INSTANCE);
     }
 
     public FloatBuffer computeTextBuffer(Font font, String text, float x, float y, float scale) {
         float originX = x;
 
         int maxInstances = text.length();
-        FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * Float.BYTES * maxInstances);
+        FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * maxInstances);
 
         for (char c : text.toCharArray()) {
             if (c == '\n') {
@@ -140,7 +146,7 @@ public class TextRenderer {
         float originX = x;
 
         int maxInstances = text.length();
-        FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * Float.BYTES * maxInstances);
+        FloatBuffer instanceData = MemoryUtil.memAllocFloat(8 * maxInstances);
 
         for (char c : text.toCharArray()) {
             if (c == '\n' || x - originX > maxWidth) {

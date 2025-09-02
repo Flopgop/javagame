@@ -1,5 +1,6 @@
 package net.flamgop;
 
+import net.flamgop.entity.Scene;
 import net.flamgop.gpu.Camera;
 import net.flamgop.input.InputState;
 import net.flamgop.math.MathHelper;
@@ -66,6 +67,7 @@ public class Player {
     private static final float CROUCH_HEIGHT = 0.55f;
     private static final float SLIDING_HEIGHT = 0.35f;
 
+    private final Scene worldScene;
     private final Camera camera;
     private final PxVec3 temp = new PxVec3();
     private final InputState inputState;
@@ -106,7 +108,9 @@ public class Player {
 
     private RaycastHit hit;
 
-    public Player(Physics physics, PhysicsScene scene, Camera camera, InputState inputState) {
+
+    public Player(Scene worldScene, Physics physics, PhysicsScene scene, Camera camera, InputState inputState) {
+        this.worldScene = worldScene;
         this.camera = camera;
         this.scene = scene;
         this.inputState = inputState;
@@ -160,7 +164,11 @@ public class Player {
     private void move(double delta) {
         PxControllerState state = new PxControllerState();
         controller.getState(state);
-        this.onGround = (state.getCollisionFlags() & PxControllerCollisionFlagEnum.eCOLLISION_DOWN.value) != 0;
+        boolean newGrounded = (state.getCollisionFlags() & PxControllerCollisionFlagEnum.eCOLLISION_DOWN.value) != 0;
+        if (!this.onGround && newGrounded) {
+            // we just landed!
+        }
+        this.onGround = newGrounded;
 
         Vector3f movementVector = new Vector3f();
         Vector3f forward = camera.forward();

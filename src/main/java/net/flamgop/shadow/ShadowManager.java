@@ -1,11 +1,13 @@
 package net.flamgop.shadow;
 
 import net.flamgop.gpu.Camera;
-import net.flamgop.gpu.GPUFramebuffer;
-import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.framebuffer.GPUFramebuffer;
+import net.flamgop.gpu.texture.GPUTexture;
 import net.flamgop.gpu.ShaderProgram;
 import net.flamgop.gpu.model.Material;
 import net.flamgop.gpu.model.TexturedMesh;
+import net.flamgop.gpu.state.StateManager;
+import net.flamgop.gpu.texture.TextureFormat;
 import net.flamgop.util.AABB;
 import net.flamgop.util.FrustumPlane;
 import net.flamgop.util.ResourceHelper;
@@ -49,15 +51,15 @@ public class ShadowManager {
         this.lambda = lambda;
         this.largestCascadeResolution = resolution;
         shadowShaderProgram = new ShaderProgram();
-        shadowShaderProgram.attachShaderSource("Shadow Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.vertex.glsl"), GL_VERTEX_SHADER);
-        shadowShaderProgram.attachShaderSource("Shadow Geometry Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.geometry.glsl"), GL_GEOMETRY_SHADER);
+        shadowShaderProgram.attachShaderSource("Shadow Vertex Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.vertex.glsl"), ShaderProgram.ShaderType.VERTEX);
+        shadowShaderProgram.attachShaderSource("Shadow Geometry Shader", ResourceHelper.loadFileContentsFromResource("shaders/shadow.geometry.glsl"), ShaderProgram.ShaderType.GEOMETRY);
         shadowShaderProgram.link();
         shadowShaderProgram.label("Shadow Program");
         depthOnlyMaterial = new Material(shadowShaderProgram);
 
         shadowFramebuffer = new GPUFramebuffer(resolution, resolution, (fb, w, h) -> {
             cascades = new GPUTexture(GPUTexture.Target.TEXTURE_2D_ARRAY); // this is cursed lmao
-            cascades.storage(1, GL_DEPTH_COMPONENT32F, w, h, cascadeCount);
+            cascades.storage(1, TextureFormat.DEPTH_COMPONENT32F, w, h, cascadeCount);
             cascades.minFilter(GPUTexture.MinFilter.LINEAR);
             cascades.magFilter(GPUTexture.MagFilter.LINEAR);
             cascades.compareMode(GPUTexture.CompareMode.COMPARE_REF_TO_TEXTURE);
@@ -65,7 +67,7 @@ public class ShadowManager {
 
             cascades.label("Shadow Depth Texture Array");
 
-            fb.texture(cascades, GL_DEPTH_ATTACHMENT, 0);
+            fb.texture(cascades, GPUFramebuffer.Attachment.DEPTH, 0);
         }, (fb) -> {
             cascades.destroy();
         });
@@ -89,7 +91,7 @@ public class ShadowManager {
     }
 
     public void bindFramebuffer() {
-        glViewport(0,0, this.largestCascadeResolution, this.largestCascadeResolution);
+        StateManager.viewport(0, 0, this.largestCascadeResolution, this.largestCascadeResolution);
         shadowFramebuffer.clear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     }
 

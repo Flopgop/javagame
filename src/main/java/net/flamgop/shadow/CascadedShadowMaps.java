@@ -1,13 +1,18 @@
 package net.flamgop.shadow;
 
 import net.flamgop.Game;
+import net.flamgop.entity.Entity;
+import net.flamgop.entity.Scene;
+import net.flamgop.entity.components.ModelRenderer;
 import net.flamgop.gpu.Camera;
+import net.flamgop.gpu.model.Model;
 import net.flamgop.util.AABB;
 import net.flamgop.util.FrustumPlane;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CascadedShadowMaps {
@@ -47,7 +52,7 @@ public class CascadedShadowMaps {
 
         float lightNear = nearFar.x;
         Vector3f tmp = new Vector3f();
-        List<AABB> aabbs = Game.INSTANCE.level().getAllObjectBounds();
+        List<AABB> aabbs = collectAllAABBs(Game.INSTANCE.scene());
         for (AABB aabb : aabbs) {
             Vector3f[] corners = aabb.getCorners();
             for (Vector3f corner : corners) {
@@ -60,6 +65,19 @@ public class CascadedShadowMaps {
 
         Matrix4f ortho = new Matrix4f().ortho(orthoMin.x, orthoMax.x, orthoMin.y, orthoMax.y, lightNear, nearFar.y);
         return new Matrix4f(ortho).mul(lightView);
+    }
+
+    private static List<AABB> collectAllAABBs(Scene scene) {
+        List<AABB> aabbs = new ArrayList<>();
+        for (Entity e : scene.allEntities()) {
+            if (e.hasComponent(ModelRenderer.class)) {
+                Model model = e.getComponent(ModelRenderer.class).model();
+                if (model != null) {
+                    model.meshes.forEach(m -> aabbs.add(m.aabb()));
+                }
+            }
+        }
+        return aabbs;
     }
 
     public static FrustumPlane[] getCascadeFrustumPlanes(Camera camera, DirectionalLight light, int resolution, int cascade, float[] splits) {

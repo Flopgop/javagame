@@ -1,7 +1,5 @@
 package net.flamgop.gpu.buffer;
 
-import static org.lwjgl.opengl.GL46.*;
-
 public class ShaderStorageBuffer extends SerializedBuffer {
     public ShaderStorageBuffer(GPUBuffer.UpdateHint hint) {
         super(hint);
@@ -11,7 +9,13 @@ public class ShaderStorageBuffer extends SerializedBuffer {
         super(usage);
     }
 
+    @Override
+    public void bind(GPUBuffer.Target target, int index) {
+        if (target != GPUBuffer.Target.SHADER_STORAGE) throw new IllegalArgumentException("Cannot bind a shader storage buffer to a target other than SHADER_STORAGE!");
+        super.bind(target, index);
+    }
+
     public void bind(int index) {
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, buffer().handle());
+        super.bind(GPUBuffer.Target.SHADER_STORAGE, index);
     }
 }

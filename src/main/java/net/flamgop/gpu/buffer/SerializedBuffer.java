@@ -7,6 +7,8 @@ import java.nio.ByteBuffer;
 public class SerializedBuffer {
     private final GPUBuffer buffer;
 
+    private ByteBuffer intermediaryBuffer;
+
     public SerializedBuffer(GPUBuffer.UpdateHint hint) {
         this.buffer = new GPUBuffer(hint == GPUBuffer.UpdateHint.STATIC ? GPUBuffer.BufferUsage.STATIC_DRAW : hint == GPUBuffer.UpdateHint.DYNAMIC ? GPUBuffer.BufferUsage.DYNAMIC_DRAW : GPUBuffer.BufferUsage.STREAM_DRAW);
     }
@@ -16,20 +18,40 @@ public class SerializedBuffer {
     }
 
     public void allocate(BufferSerializable bufferData) {
-        ByteBuffer buf = MemoryUtil.memAlloc(bufferData.length());
-        bufferData.encode(buf);
-        this.buffer.allocate(buf);
-        MemoryUtil.memFree(buf);
+        this.ensureIntermediaryCapacity(bufferData.length());
+        bufferData.encode(intermediaryBuffer);
+        this.buffer.allocate(intermediaryBuffer);
+        intermediaryBuffer.clear();
     }
 
     public void store(BufferSerializable bufferData) {
-        ByteBuffer buf = MemoryUtil.memAlloc(bufferData.length());
-        bufferData.encode(buf);
-        this.buffer.store(buf, 0);
-        MemoryUtil.memFree(buf);
+        if (intermediaryBuffer == null) {
+            throw new IllegalStateException("This buffer has not had data allocated yet!");
+        }
+        bufferData.encode(intermediaryBuffer);
+        this.buffer.store(intermediaryBuffer, 0);
+        intermediaryBuffer.clear();
     }
 
     public GPUBuffer buffer() {
         return this.buffer;
+    }
+
+    public void bind(GPUBuffer.Target target, int index) {
+        this.buffer.bind(target, index);
+    }
+
+    private void ensureIntermediaryCapacity(int size) {
+        if (intermediaryBuffer == null || intermediaryBuffer.capacity() != size) {
+            if (intermediaryBuffer != null) MemoryUtil.memFree(intermediaryBuffer);
+            intermediaryBuffer = MemoryUtil.memAlloc(size);
+        } else {
+            intermediaryBuffer.clear();
+        }
+    }
+
+    public void destroy() {
+        this.buffer.destroy();
+        MemoryUtil.memFree(intermediaryBuffer);
     }
 }

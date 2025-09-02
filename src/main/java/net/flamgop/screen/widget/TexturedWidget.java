@@ -1,6 +1,6 @@
 package net.flamgop.screen.widget;
 
-import net.flamgop.gpu.GPUTexture;
+import net.flamgop.gpu.texture.GPUTexture;
 import net.flamgop.gpu.Window;
 import net.flamgop.input.InputState;
 import org.joml.Vector2f;
