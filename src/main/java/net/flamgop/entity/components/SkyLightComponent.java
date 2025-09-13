@@ -2,9 +2,10 @@ package net.flamgop.entity.components;
 
 import net.flamgop.asset.AssetManager;
 import net.flamgop.entity.AbstractComponent;
+import net.flamgop.entity.Component;
 import net.flamgop.shadow.DirectionalLight;
 
-public class SkyLightComponent extends AbstractComponent {
+public class SkyLightComponent extends Component {
 
     private final DirectionalLight light;
 
@@ -15,10 +16,4 @@ public class SkyLightComponent extends AbstractComponent {
     public DirectionalLight skylight() {
         return light;
     }
-
-    @Override public void load(AssetManager assetManager) {}
-    @Override public void unload(AssetManager assetManager) {}
-    @Override public void update(float delta) {}
-    @Override public void physicsUpdate(float fixedDelta) {}
-    @Override public void render() {}
 }

@@ -6,11 +6,12 @@ import java.nio.ByteOrder;
 public class DefaultVertex {
 
     public static final int BYTES = 5 * Float.BYTES + 2 * Integer.BYTES;
-    public static final VertexFormat FORMAT = new VertexFormat()
+    public static final VertexFormat FORMAT = VertexFormat.builder()
             .attribute(0, Attribute.of(Attribute.Type.FLOAT, 3, false))
             .attribute(1, Attribute.of(Attribute.Type.FLOAT, 2, false))
             .attribute(2, Attribute.of(Attribute.Type.INT_2_10_10_10_REV, 4, true))
-            .attribute(3, Attribute.of(Attribute.Type.INT_2_10_10_10_REV, 4, true));
+            .attribute(3, Attribute.of(Attribute.Type.INT_2_10_10_10_REV, 4, true))
+            .build();
 
     private static int pack10(float f) {
         f = Math.max(-1.0f, Math.min(1.0f, f));

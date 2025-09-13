@@ -3,6 +3,7 @@ package net.flamgop.entity.components;
 import net.flamgop.asset.AssetManager;
 import net.flamgop.entity.AbstractComponent;
 import net.flamgop.entity.Entity;
+import net.flamgop.entity.Scene;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.ShaderStorageBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
@@ -14,11 +15,14 @@ import org.joml.Vector4f;
 
 public class PBRManagerComponent extends AbstractComponent {
 
+    private final Scene scene;
+
     private final LightArray lightArray;
     private final ShaderStorageBuffer lightSSBO;
     private final UniformBuffer pbrUBO;
 
-    public PBRManagerComponent(Entity entity) {
+    public PBRManagerComponent(Scene scene, Entity entity) {
+        this.scene = scene;
         DirectionalLight skylight = entity.getComponent(SkyLightComponent.class).skylight();
 
         this.lightArray = new LightArray();
@@ -35,6 +39,15 @@ public class PBRManagerComponent extends AbstractComponent {
         pbr.lightCount = this.lightArray.lights.size();
         pbrUBO.allocate(pbr);
 
+        lightSSBO.allocate(this.lightArray);
+    }
+
+    public void recollectLights() {
+        this.lightArray.lights.clear();
+        scene.allEntities().forEach(e -> {
+            if (e.hasComponent(LightComponent.class))
+                this.lightArray.lights.add(e.getComponent(LightComponent.class).light());
+        });
         lightSSBO.allocate(this.lightArray);
     }
 

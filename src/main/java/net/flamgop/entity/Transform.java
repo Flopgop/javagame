@@ -64,9 +64,11 @@ public class Transform {
 
     public void position(Vector3f position) {
         this.position.set(position);
+        markDirty();
     }
     public void rotation(Quaternionf rotation) {
         this.rotation.set(rotation);
+        markDirty();
     }
 
     private void markDirty() {

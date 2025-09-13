@@ -70,16 +70,14 @@ dependencies {
     implementation("org.joml", "joml-primitives", jomlPrimitivesVersion)
     implementation("org.joml", "joml", jomlVersion)
 
-    implementation("de.fabmax:physx-jni:2.6.0")
-
-    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-windows")
-    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-linux")
-    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos")
-    runtimeOnly("de.fabmax:physx-jni:2.6.0:natives-macos-arm64")
-
     implementation("de.marhali:json5-java:2.0.0")
 
     implementation("io.github.spair:imgui-java-binding:1.89.0")
     implementation("io.github.spair:imgui-java-lwjgl3:1.89.0")
     implementation("io.github.spair:imgui-java-natives-windows:1.89.0")
+
+    implementation("com.github.stephengold:jolt-jni-Windows64:3.1.0")
+    runtimeOnly("com.github.stephengold:jolt-jni-Windows64:3.1.0:DebugSp")
+    implementation("io.github.electrostat-lab:snaploader:1.1.1-stable")
+    runtimeOnly("com.github.oshi:oshi-core:6.8.3")
 }

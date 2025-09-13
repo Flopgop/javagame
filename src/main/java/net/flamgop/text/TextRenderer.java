@@ -14,17 +14,16 @@ import org.lwjgl.system.MemoryUtil;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
-import static org.lwjgl.opengl.GL46.*;
-
 public class TextRenderer {
 
     private static final int FLOATS_PER_INSTANCE = 8;
-    private static final VertexFormat VERTEX_FORMAT = new VertexFormat()
+    private static final VertexFormat VERTEX_FORMAT = VertexFormat.builder()
             .attribute(0, Attribute.of(Attribute.Type.FLOAT, 2, false))
             .attribute(1, Attribute.of(Attribute.Type.FLOAT, 2, false))
             .attribute(2, Attribute.of(Attribute.Type.FLOAT, 4, false, 1, 1))
             .attribute(3, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1))
-            .attribute(4, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1));
+            .attribute(4, Attribute.of(Attribute.Type.FLOAT, 2, false, 1, 1))
+            .build();
 
     private final VertexArray unitQuad;
     private final ShaderProgram textShader;

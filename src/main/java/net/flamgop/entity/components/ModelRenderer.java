@@ -3,13 +3,13 @@ package net.flamgop.entity.components;
 import net.flamgop.asset.Asset;
 import net.flamgop.asset.AssetIdentifier;
 import net.flamgop.asset.AssetManager;
-import net.flamgop.entity.AbstractComponent;
+import net.flamgop.entity.Component;
 import net.flamgop.gpu.buffer.GPUBuffer;
 import net.flamgop.gpu.buffer.UniformBuffer;
 import net.flamgop.gpu.data.ModelUniformData;
 import net.flamgop.gpu.model.Model;
 
-public class ModelRenderer extends AbstractComponent {
+public class ModelRenderer extends Component {
 
     private final AssetIdentifier assetIdentifier;
     private UniformBuffer uniformBuffer;
@@ -41,12 +41,6 @@ public class ModelRenderer extends AbstractComponent {
         uniformBuffer.destroy();
         assetManager.unload(this.assetIdentifier, Model.class);
     }
-
-    @Override
-    public void update(float delta) {}
-
-    @Override
-    public void physicsUpdate(float fixedDelta) {}
 
     @Override
     public void render() {

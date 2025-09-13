@@ -1,186 +1,99 @@
 package net.flamgop.physics;
 
-import org.lwjgl.assimp.*;
-import org.lwjgl.system.MemoryStack;
-import physx.PxTopLevelFunctions;
-import physx.common.*;
-import physx.cooking.*;
-import physx.geometry.PxConvexMesh;
-import physx.geometry.PxTriangleMesh;
-import physx.physics.PxPhysics;
-import physx.physics.PxScene;
-import physx.physics.PxSceneDesc;
-import physx.support.PxArray_PxU32;
-import physx.support.PxArray_PxVec3;
-import physx.vehicle2.PxVehicleTopLevelFunctions;
-
-import java.nio.ByteBuffer;
+import com.github.stephengold.joltjni.*;
+import electrostatic4j.snaploader.LibraryInfo;
+import electrostatic4j.snaploader.LoadingCriterion;
+import electrostatic4j.snaploader.NativeBinaryLoader;
+import electrostatic4j.snaploader.filesystem.DirectoryPath;
+import electrostatic4j.snaploader.platform.NativeDynamicLibrary;
+import electrostatic4j.snaploader.platform.util.PlatformPredicate;
 
 public class Physics {
 
-    private final PxDefaultAllocator allocator = new PxDefaultAllocator();
-    private final PxDefaultErrorCallback errorCallback = new PxDefaultErrorCallback();
-    private final PxFoundation foundation;
+    private final TempAllocator tempAllocator;
+    private final JobSystem jobSystem;
+    private final PhysicsSystem physicsSystem;
 
-    private final PxTolerancesScale tolerances = new PxTolerancesScale();
-    private final PxPhysics physics;
-    private final PxDefaultCpuDispatcher cpuDispatcher;
-    private final PxCookingParams cookingParams;
+    public Physics() throws Exception {
+        LibraryInfo info = new LibraryInfo(null, "joltjni", DirectoryPath.USER_DIR);
+        NativeBinaryLoader loader = new NativeBinaryLoader(info);
 
-    public Physics(int threads) {
-        int version = PxTopLevelFunctions.getPHYSICS_VERSION();
-        int versionMajor = version >> 24;
-        int versionMinor = (version >> 16) & 0xff;
-        int versionMicro = (version >> 8) & 0xff;
-        System.out.printf("PhysX loaded, version: %d.%d.%d\n", versionMajor, versionMinor, versionMicro);
+        NativeDynamicLibrary[] libraries = {
+//                new NativeDynamicLibrary("linux/aarch64/com/github/stephengold", PlatformPredicate.LINUX_ARM_64),
+//                new NativeDynamicLibrary("linux/armhf/com/github/stephengold", PlatformPredicate.LINUX_ARM_32),
+//                new NativeDynamicLibrary("linux/x86-64/com/github/stephengold", PlatformPredicate.LINUX_X86_64),
+//                new NativeDynamicLibrary("osx/aarch64/com/github/stephengold", PlatformPredicate.MACOS_ARM_64),
+//                new NativeDynamicLibrary("osx/x86-64/com/github/stephengold", PlatformPredicate.MACOS_X86_64),
+                new NativeDynamicLibrary("windows/x86-64/com/github/stephengold", PlatformPredicate.WIN_X86_64)
+        };
+        loader.registerNativeLibraries(libraries).initPlatformLibrary();
+        loader.loadLibrary(LoadingCriterion.CLEAN_EXTRACTION);
 
-        this.foundation = PxTopLevelFunctions.CreateFoundation(version, allocator, errorCallback);
-        PxVehicleTopLevelFunctions.InitVehicleExtension(foundation);
+        JoltPhysicsObject.startCleaner();
+        Jolt.registerDefaultAllocator();
+        Jolt.installDefaultAssertCallback();
+        Jolt.installDefaultTraceCallback();
+        if (!Jolt.newFactory()) throw new RuntimeException("Failed to install Jolt factory");
+        Jolt.registerTypes();
 
-        this.physics = PxTopLevelFunctions.CreatePhysics(version, foundation, tolerances);
+        tempAllocator = new TempAllocatorMalloc();
+        int numWorkerThreads = Runtime.getRuntime().availableProcessors();
+        jobSystem = new JobSystemThreadPool(
+                Jolt.cMaxPhysicsJobs, Jolt.cMaxPhysicsBarriers, numWorkerThreads);
 
-        this.cpuDispatcher = PxTopLevelFunctions.DefaultCpuDispatcherCreate(threads);
+        final int numBpLayers = 3;
 
-        this.cookingParams = new PxCookingParams(tolerances);
+        ObjectLayerPairFilterTable ovoFilter
+                = new ObjectLayerPairFilterTable(Layers.NUM_LAYERS);
+        ovoFilter.enableCollision(Layers.MOVING, Layers.MOVING);
+        ovoFilter.enableCollision(Layers.MOVING, Layers.NON_MOVING);
+        ovoFilter.enableCollision(Layers.MOVING, Layers.PLAYER);
+        ovoFilter.enableCollision(Layers.PLAYER, Layers.NON_MOVING);
+        ovoFilter.enableCollision(Layers.PLAYER, Layers.PLAYER);
+        ovoFilter.disableCollision(Layers.NON_MOVING, Layers.NON_MOVING);
+
+        BroadPhaseLayerInterfaceTable layerMap
+                = new BroadPhaseLayerInterfaceTable(Layers.NUM_LAYERS, numBpLayers);
+        layerMap.mapObjectToBroadPhaseLayer(Layers.MOVING, 0);
+        layerMap.mapObjectToBroadPhaseLayer(Layers.NON_MOVING, 1);
+        layerMap.mapObjectToBroadPhaseLayer(Layers.PLAYER, 2);
+        ObjectVsBroadPhaseLayerFilterTable ovbFilter
+                = new ObjectVsBroadPhaseLayerFilterTable(
+                layerMap, numBpLayers, ovoFilter, Layers.NUM_LAYERS);
+
+        physicsSystem = new PhysicsSystem();
+        int maxBodies = 5_000;
+        int numBodyMutexes = 0; // default
+        int maxBodyPairs = 65_536;
+        int maxContacts = 20_480;
+        physicsSystem.init(maxBodies, numBodyMutexes, maxBodyPairs, maxContacts, layerMap, ovbFilter, ovoFilter);
     }
 
-    public PxDefaultCpuDispatcher cpuDispatcher() {
-        return cpuDispatcher;
+    public PhysicsSystem system() {
+        return physicsSystem;
     }
 
-    public PxPhysics physics() {
-        return physics;
+    public TempAllocator tempAllocator() {
+        return tempAllocator;
     }
 
-    public PxFoundation foundation() {
-        return foundation;
+    public BodyFilter allBodies() {
+        return new BodyFilter();
     }
 
-    public PxTolerancesScale tolerances() {
-        return tolerances;
+    public ShapeFilter allShapes() {
+        return new ShapeFilter();
     }
 
-    public PxCookingParams cookingParams() {
-        return cookingParams;
+    public BodyInterface bodyInterface() {
+        return physicsSystem.getBodyInterface();
     }
 
-    public PxSceneDesc defaultSceneDesc(PxVec3 gravity) {
-        PxSceneDesc sceneDesc = new PxSceneDesc(tolerances());
-        sceneDesc.setGravity(gravity);
-        sceneDesc.setCpuDispatcher(cpuDispatcher());
-        sceneDesc.setFilterShader(PxTopLevelFunctions.DefaultFilterShader());
-        return sceneDesc;
-    }
-
-    public PhysicsScene createScene(PxSceneDesc sceneDesc) {
-        PxScene pXscene = this.physics.createScene(sceneDesc);
-        PhysicsScene scene = new PhysicsScene(pXscene);
-        sceneDesc.destroy();
-        return scene;
-    }
-
-    public PxTriangleMesh loadMesh(ByteBuffer bytes) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            AIScene scene = Assimp.aiImportFileFromMemory(bytes, Assimp.aiProcess_Triangulate | Assimp.aiProcess_JoinIdenticalVertices, (ByteBuffer) null);
-            if (scene == null || scene.mNumMeshes() == 0) throw new IllegalStateException("Failed to load mesh");
-            AIMesh aiMesh = AIMesh.create(scene.mMeshes().get(0));
-
-            if (aiMesh.mNumVertices() > 256) {
-                System.out.println("PhysX doesn't appreciate meshes with more than 256 vertices, this mesh has " + aiMesh.mNumVertices() + " vertices! Consider using a simplified mesh instead, or using multiple simple collision meshes without models.");
-            }
-
-            PxArray_PxVec3 vertexBuffer = new PxArray_PxVec3();
-            PxArray_PxU32 indexBuffer = new PxArray_PxU32();
-
-            AIVector3D.Buffer vertices = aiMesh.mVertices();
-            for (int i = 0; i < aiMesh.mNumVertices(); i++) {
-                AIVector3D vertex = vertices.get(i);
-                vertexBuffer.pushBack(PxVec3.createAt(stack, MemoryStack::nmalloc, vertex.x(), vertex.y(), vertex.z()));
-            }
-
-            AIFace.Buffer faces = aiMesh.mFaces();
-            for (int i = 0; i < aiMesh.mNumFaces(); i++) {
-                AIFace face = faces.get(i);
-                for (int j = 0; j  < face.mNumIndices(); j++) {
-                    indexBuffer.pushBack(face.mIndices().get(j));
-                }
-            }
-
-            PxBoundedData points = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
-            points.setCount(vertexBuffer.size());
-            points.setStride(PxVec3.SIZEOF);
-            points.setData(vertexBuffer.begin());
-
-            PxBoundedData triangles = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
-            triangles.setCount(indexBuffer.size() / 3);
-            triangles.setStride(4 * 3);
-            triangles.setData(indexBuffer.begin());
-
-            PxTriangleMeshDesc meshDesc = new PxTriangleMeshDesc();
-            meshDesc.setPoints(points);
-            meshDesc.setTriangles(triangles);
-
-            PxTriangleMesh mesh = PxTopLevelFunctions.CreateTriangleMesh(cookingParams, meshDesc);
-
-            scene.free();
-            return mesh;
-        }
-    }
-
-    public PxConvexMesh loadConvexMesh(ByteBuffer bytes) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            AIScene scene = Assimp.aiImportFileFromMemory(bytes, Assimp.aiProcess_Triangulate | Assimp.aiProcess_JoinIdenticalVertices, (ByteBuffer) null);
-            if (scene == null || scene.mNumMeshes() == 0) throw new IllegalStateException("Failed to load mesh");
-            AIMesh aiMesh = AIMesh.create(scene.mMeshes().get(0));
-
-            if (aiMesh.mNumVertices() > 256) {
-                System.out.println("PhysX doesn't appreciate meshes with more than 256 vertices, this mesh has " + aiMesh.mNumVertices() + " vertices! Consider using a simplified mesh instead, or using multiple simple collision meshes without models.");
-            }
-
-            PxArray_PxVec3 vertexBuffer = new PxArray_PxVec3();
-            PxArray_PxU32 indexBuffer = new PxArray_PxU32();
-
-            AIVector3D.Buffer vertices = aiMesh.mVertices();
-            for (int i = 0; i < aiMesh.mNumVertices(); i++) {
-                AIVector3D vertex = vertices.get(i);
-                vertexBuffer.pushBack(PxVec3.createAt(stack, MemoryStack::nmalloc, vertex.x(), vertex.y(), vertex.z()));
-            }
-
-            AIFace.Buffer faces = aiMesh.mFaces();
-            for (int i = 0; i < aiMesh.mNumFaces(); i++) {
-                AIFace face = faces.get(i);
-                for (int j = 0; j  < face.mNumIndices(); j++) {
-                    indexBuffer.pushBack(face.mIndices().get(j));
-                }
-            }
-
-            PxBoundedData points = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
-            points.setCount(vertexBuffer.size());
-            points.setStride(PxVec3.SIZEOF);
-            points.setData(vertexBuffer.begin());
-
-            PxBoundedData triangles = PxBoundedData.createAt(stack, MemoryStack::nmalloc);
-            triangles.setCount(indexBuffer.size() / 3);
-            triangles.setStride(4 * 3);
-            triangles.setData(indexBuffer.begin());
-
-            PxConvexMeshDesc meshDesc = new PxConvexMeshDesc();
-            meshDesc.setPoints(points);
-            meshDesc.setFlags(new PxConvexFlags((short)(PxConvexFlagEnum.eCOMPUTE_CONVEX.value | PxConvexFlagEnum.eCHECK_ZERO_AREA_TRIANGLES.value | PxConvexFlagEnum.eQUANTIZE_INPUT.value)));
-
-            PxConvexMesh mesh = PxTopLevelFunctions.CreateConvexMesh(cookingParams, meshDesc);
-
-            scene.free();
-            return mesh;
-        }
+    public void update(float delta, int steps) {
+        physicsSystem.update(delta, steps, tempAllocator, jobSystem);
     }
 
     public void destroy() {
-        cpuDispatcher.destroy();
-        physics.release();
-        tolerances.destroy();
-        foundation.release();
-        errorCallback.destroy();
-        allocator.destroy();
+        jobSystem.close();
     }
 }

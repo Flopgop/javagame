@@ -1,10 +1,12 @@
 package net.flamgop.entity;
 
 import net.flamgop.asset.AssetManager;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 public class Scene {
     private final List<Entity> allEntities = new ArrayList<>();
@@ -13,6 +15,10 @@ public class Scene {
     public void addRootEntity(Entity entity) {
         rootEntities.add(entity);
         allEntities.add(entity);
+    }
+
+    public @Nullable Entity getByUUID(UUID uuid) {
+        return allEntities.stream().filter(e -> e.id().equals(uuid)).findFirst().orElse(null);
     }
 
     public List<Entity> allEntities() {

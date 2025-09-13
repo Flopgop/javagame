@@ -1,64 +1,22 @@
 package net.flamgop;
 
-import net.flamgop.entity.Scene;
+import com.github.stephengold.joltjni.*;
+import com.github.stephengold.joltjni.enumerate.EGroundState;
+import com.github.stephengold.joltjni.readonly.RVec3Arg;
+import com.github.stephengold.joltjni.readonly.Vec3Arg;
 import net.flamgop.gpu.Camera;
 import net.flamgop.input.InputState;
 import net.flamgop.math.MathHelper;
-import net.flamgop.physics.CollisionFlags;
+import net.flamgop.physics.Layers;
 import net.flamgop.physics.Physics;
-import net.flamgop.physics.PhysicsScene;
 import net.flamgop.physics.RaycastHit;
 import net.flamgop.text.TextRenderer;
-import net.flamgop.util.PhysxJoml;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
-import physx.character.*;
-import physx.common.PxVec3;
-import physx.physics.*;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class Player {
-
-    private static class WakerUpperBehaviorCallback extends PxControllerBehaviorCallbackImpl {
-        @Override
-        public int getShapeBehaviorFlags(PxShape shape, PxActor actor) {
-            if (actor.getType() == PxActorTypeEnum.eRIGID_DYNAMIC) {
-                PxRigidDynamic dynamic = PxRigidDynamic.wrapPointer(actor.getAddress());
-                if (dynamic.isSleeping()) {
-                    dynamic.wakeUp();
-                }
-            }
-            return 0;
-        }
-    }
-
-    private static class PusherHitReport extends PxUserControllerHitReportImpl {
-
-        private final Player player;
-
-        public PusherHitReport(Player player) {
-            this.player = player;
-        }
-
-        @Override
-        public void onShapeHit(PxControllerShapeHit hit) {
-            if (hit.getActor().getType() == PxActorTypeEnum.eRIGID_DYNAMIC && !player.fly) {
-                PxRigidDynamic dynamic = PxRigidDynamic.wrapPointer(hit.getActor().getAddress());
-                if (dynamic.isSleeping()) {
-                    dynamic.wakeUp();
-                }
-
-                PxVec3 pushDirection = hit.getWorldNormal();
-                float force = -player.pushForce(hit.getActor());
-                PxVec3 pushForce = new PxVec3(force, force, force);
-                dynamic.addForce(pushDirection.multiply(pushForce), PxForceModeEnum.eFORCE);
-                pushForce.destroy();
-
-                // how do I make dynamic look like its getting convincingly pushed?
-            }
-        }
-    }
 
     private static final float FOV = 60.0f;
     private static final float SPRINT_FOV = 75.0f;
@@ -67,14 +25,8 @@ public class Player {
     private static final float CROUCH_HEIGHT = 0.55f;
     private static final float SLIDING_HEIGHT = 0.35f;
 
-    private final Scene worldScene;
     private final Camera camera;
-    private final PxVec3 temp = new PxVec3();
     private final InputState inputState;
-    private final PhysicsScene scene;
-
-    private final PxControllerFilters filters;
-    private final PxController controller;
 
     private final Vector3f positionView = new Vector3f();
     private final Vector3f velocity = new Vector3f();
@@ -108,33 +60,30 @@ public class Player {
 
     private RaycastHit hit;
 
+    private final Physics physics;
+    private final Shape shape;
+    private final CharacterVirtualRef characterVirtual;
+    private final ExtendedUpdateSettings extendedUpdateSettings;
 
-    public Player(Scene worldScene, Physics physics, PhysicsScene scene, Camera camera, InputState inputState) {
-        this.worldScene = worldScene;
+    public Player(Physics physics, Camera camera, InputState inputState) {
         this.camera = camera;
-        this.scene = scene;
         this.inputState = inputState;
+        this.physics = physics;
 
-        this.filters = new PxControllerFilters();
-        PxMaterial material = physics.physics().createMaterial(0.0f, 0.0f, 0.0f);
-        PxBoxControllerDesc desc = new PxBoxControllerDesc();
-        desc.setHalfHeight(1f);
-        desc.setHalfForwardExtent(0.5f);
-        desc.setHalfSideExtent(0.5f);
-        PxExtendedVec3 posExt = new PxExtendedVec3(camera.position().x, camera.position().y, camera.position().z);
-        desc.setPosition(posExt);
-        temp.setX(0); temp.setY(1); temp.setZ(0);
-        desc.setUpDirection(temp);
-        desc.setMaterial(material);
-        desc.setBehaviorCallback(new WakerUpperBehaviorCallback());
-        desc.setReportCallback(new PusherHitReport(this));
-        this.controller = scene.controllerManager().createController(desc);
-        posExt.destroy();
-        controller.move(new PxVec3(0, -0.1f, 0), 0.1f, 0.016f, filters);
+        this.shape = new CapsuleShape(1f, 0.5f);
+        CharacterVirtualSettings settings = new CharacterVirtualSettings();
+        settings.setShape(shape);
+        settings.setInnerBodyLayer(Layers.PLAYER);
 
-        filters.setMFilterData(new PxFilterData(CollisionFlags.PLAYER.flag(), CollisionFlags.WORLD.flag(), 0, 0));
+        RVec3Arg startLocation = new RVec3(0.,2.,0.);
+        characterVirtual = new CharacterVirtual(settings, startLocation, new Quat(), 0, physics.system()).toRef();
 
-        this.gravity = 2 * scene.gravity();
+        extendedUpdateSettings = new ExtendedUpdateSettings();
+        extendedUpdateSettings.setStickToFloorStepDown(Vec3.sZero());
+        extendedUpdateSettings.setWalkStairsStepUp(Vec3.sZero());
+
+        //noinspection resource
+        this.gravity = physics.system().getGravity().getY() * 2f;
     }
 
     public Camera camera() {
@@ -153,18 +102,8 @@ public class Player {
         fly = !fly;
     }
 
-    public float pushForce(PxActor actor) {
-        return crouching ? 1000f : 5000f;
-    }
-
-    public PhysicsScene scene() {
-        return scene;
-    }
-
     private void move(double delta) {
-        PxControllerState state = new PxControllerState();
-        controller.getState(state);
-        boolean newGrounded = (state.getCollisionFlags() & PxControllerCollisionFlagEnum.eCOLLISION_DOWN.value) != 0;
+        boolean newGrounded = characterVirtual.getGroundState() == EGroundState.OnGround;
         if (!this.onGround && newGrounded) {
             // we just landed!
         }
@@ -273,17 +212,12 @@ public class Player {
             }
         }
 
-        Vector3f newVel = new Vector3f(velocity).mul((float) delta);
-        PxVec3 disp = PhysxJoml.toPxVec3(newVel);
-        controller.move(disp, 0.00001f, (float) delta, filters);
-        disp.destroy();
+        characterVirtual.setLinearVelocity(new Vec3(velocity.x, velocity.y, velocity.z));
 
         velocity.x *= (float) (0.1f * delta);
         velocity.z *= (float) (0.1f * delta);
 
-        state.destroy();
-
-        this.hit = this.scene.raycast(this.camera.position(), this.camera.forward(), 100f);
+//        this.hit = this.scene.raycast(this.camera.position(), this.camera.forward(), 100f);
     }
 
     public void update(double delta) {
@@ -318,14 +252,23 @@ public class Player {
 
         float prevCurrentPlayerHeight = currentPlayerHeight;
         currentPlayerHeight = MathHelper.conditionalLerp(currentPlayerHeight, targetPlayerHeight, (float) delta, 10.0f);
-        if (prevCurrentPlayerHeight != currentPlayerHeight) controller.resize(currentPlayerHeight);
+        if (prevCurrentPlayerHeight != currentPlayerHeight) {}
 
-        camera.position(new Vector3f((float) controller.getPosition().getX(), (float) (controller.getPosition().getY() + 0.25f), (float) controller.getPosition().getZ()));
+        camera.position(new Vector3f((float) characterVirtual.getPosition().getX(), ((float) characterVirtual.getPosition().getY() - 1f + currentPlayerHeight) + 0.25f, (float) characterVirtual.getPosition().getZ()));
     }
 
 
+    @SuppressWarnings("resource")
     public void fixedUpdate(double delta) {
         move(delta);
+        Vec3Arg gravity = physics.system().getGravity();
+        BroadPhaseLayerFilter bplFilter
+                = physics.system().getDefaultBroadPhaseLayerFilter(Layers.MOVING);
+        ObjectLayerFilter olFilter
+                = physics.system().getDefaultLayerFilter(Layers.MOVING);
+        TempAllocator tempAllocator = physics.tempAllocator();
+        characterVirtual.extendedUpdate((float) delta, gravity, extendedUpdateSettings, bplFilter,
+                olFilter, physics.allBodies(), physics.allShapes(), tempAllocator);
     }
 
     public void render() {

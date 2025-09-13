@@ -1,5 +1,8 @@
 package net.flamgop.gpu.vertex;
 
+import net.flamgop.gpu.state.StateManager;
+import org.lwjgl.opengl.GL46;
+
 import java.util.*;
 
 public class VertexFormat {
@@ -10,40 +13,53 @@ public class VertexFormat {
     // buffer.attribute(2, 4, GL_INT_2_10_10_10_REV, true, 5 * Float.BYTES); // normal
     // buffer.attribute(3, 4, GL_INT_2_10_10_10_REV, true, 5 * Float.BYTES + Integer.BYTES); // tangent
 
-    private final List<Attribute> attributes = new ArrayList<>();
-
-    public VertexFormat() {}
-
-    public VertexFormat attribute(Attribute attribute) {
-        this.attributes.add(attribute);
-        return this;
+    public static Builder builder() {
+        return new Builder();
     }
 
-    public VertexFormat attributes(Attribute... attributes) {
-        this.attributes.addAll(Arrays.asList(attributes));
-        return this;
-    }
+    public static class Builder {
+        private final Attribute[] bindings;
 
-    public VertexFormat clear() {
-        this.attributes.clear();
-        return this;
-    }
-
-    public VertexFormat attribute(int index, Attribute attribute) {
-        this.attributes.add(index, attribute);
-        return this;
-    }
-
-    public VertexFormat attributes(int index, Attribute... attributes) {
-        for (int i = 0; i < attributes.length; i++) {
-            this.attributes.add(index + i, attributes[i]);
+        private Builder() {
+            this.bindings = new Attribute[StateManager.getStateInteger(GL46.GL_MAX_VERTEX_ATTRIB_BINDINGS)];
         }
-        return this;
+
+        public Builder clear() {
+            Arrays.fill(bindings, null);
+            return this;
+        }
+
+        public Builder attribute(int index, Attribute attribute) {
+            bindings[index] = attribute;
+            return this;
+        }
+
+        public Builder attributes(int index, Attribute... attributes) {
+            System.arraycopy(attributes, 0, bindings, index, attributes.length);
+            return this;
+        }
+
+        public VertexFormat build() {
+            int size = bindings.length;
+            while (size > 0 && bindings[size - 1] == null) size--;
+            return new VertexFormat(Arrays.copyOf(bindings, size));
+        }
+    }
+
+    private final Attribute[] bindings;
+
+    // sparse array blegh
+    public VertexFormat(Attribute... bindings) {
+        int maxAttribs = StateManager.getStateInteger(GL46.GL_MAX_VERTEX_ATTRIB_BINDINGS);
+        if (bindings.length > maxAttribs)
+            throw new IllegalArgumentException("Number of bindings in a vertex format must not exceed " + maxAttribs + "! (" + bindings.length + " > " + maxAttribs + ")");
+        this.bindings = bindings;
     }
 
     public int stride(int bindingIndex) {
         int vertexSize = 0;
-        for (Attribute attribute : attributes) {
+        for (Attribute attribute : bindings) {
+            if (attribute == null) continue;
             if (attribute.bindingIndex() == bindingIndex) {
                 if (attribute.type().packed())
                     vertexSize += attribute.type().byteCount();
@@ -56,8 +72,9 @@ public class VertexFormat {
 
     public void setup(VertexArray buffer) {
         Map<Integer, Integer> bindingOffsets = new HashMap<>();
-        for (int index = 0; index < attributes.size(); index++) {
-            Attribute attribute = attributes.get(index);
+        for (int index = 0; index < bindings.length; index++) {
+            Attribute attribute = bindings[index];
+            if (attribute == null) continue;
             int bindingIndex = attribute.bindingIndex();
 
             int offset = bindingOffsets.getOrDefault(bindingIndex, 0);

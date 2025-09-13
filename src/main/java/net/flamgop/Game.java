@@ -23,17 +23,17 @@ import net.flamgop.gpu.texture.TextureFormat;
 import net.flamgop.gpu.vertex.Attribute;
 import net.flamgop.gpu.vertex.VertexArray;
 import net.flamgop.gpu.vertex.VertexFormat;
-import net.flamgop.physics.CollisionFlags;
 import net.flamgop.physics.Physics;
+import net.flamgop.physics.PhysicsShape;
 import net.flamgop.screen.PauseScreen;
 import net.flamgop.screen.Screen;
-import net.flamgop.shadow.DirectionalLight;
 import net.flamgop.shadow.ShadowManager;
 import net.flamgop.sound.Sound;
 import net.flamgop.sound.SoundManager;
 import net.flamgop.sound.SoundSource;
 import net.flamgop.text.Font;
 import net.flamgop.text.TextRenderer;
+import net.flamgop.util.LazyInit;
 import net.flamgop.util.ResourceHelper;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
@@ -43,23 +43,26 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.renderdoc.api.RenderDoc;
-import physx.physics.*;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class Game {
 
     public static Game INSTANCE;
 
-    private static final VertexFormat FRAMEBUFFER_VERTEX_FORMAT = new VertexFormat()
+    private static final LazyInit<VertexFormat> FRAMEBUFFER_VERTEX_FORMAT = new LazyInit<>(() -> VertexFormat.builder()
             .attribute(0, Attribute.of(Attribute.Type.FLOAT, 3, false))
             .attribute(1, Attribute.of(Attribute.Type.FLOAT, 3, false))
-            .attribute(2, Attribute.of(Attribute.Type.FLOAT, 2, false));
+            .attribute(2, Attribute.of(Attribute.Type.FLOAT, 2, false))
+            .build());
+
     private static final float[] FRAMEBUFFER_QUAD_VERTICES = new float[]{
             -1, 0, -1,  0, 1, 0,  0, 0, // vertex position, normal, uv
              1, 0, -1,  0, 1, 0,  1, 0,
@@ -127,7 +130,7 @@ public class Game {
     private @Nullable Screen currentScreen;
 
     private boolean paused = false;
-    private int tonemapMode = 0;
+    private int tonemapMode = 2;
 
     private final double fixedDeltaTime = 1.0 / 90.0;
     private final int maxSubstepsPerFrame = 20;
@@ -143,6 +146,10 @@ public class Game {
 
     public Window window() {
         return window;
+    }
+
+    public Physics physics() {
+        return physics;
     }
 
     public void screen(@Nullable Screen screen) {
@@ -172,7 +179,11 @@ public class Game {
             System.out.println("RenderDoc " + renderDocVersion.toString() + " loaded.");
         }
 
-        physics = new Physics(4);
+        try {
+            physics = new Physics();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
         if (!GLFW.glfwInit()) throw new RuntimeException("Failed to initialize GLFW");
         GLFWErrorCallback.createPrint(System.err).set();
@@ -210,6 +221,8 @@ public class Game {
         this.assetManager.registerLoader(GPUTexture.class, new TextureLoader());
         this.assetManager.registerLoader(String.class, new StringLoader());
         this.assetManager.registerLoader(Sound.class, new SoundLoader());
+        this.assetManager.registerLoader(PhysicsShape.class, new PhysicsShapeLoader());
+        this.assetManager.registerLoader(Scene.class, new SceneLoader(assetManager, physics));
 
         GPUTexture.loadMissingTexture(assetManager);
         GPUTexture.loadBlit();
@@ -265,7 +278,7 @@ public class Game {
             ByteBuffer vertices = MemoryUtil.memByteBuffer(stack.floats(FRAMEBUFFER_QUAD_VERTICES));
             ByteBuffer indices = stack.bytes(FRAMEBUFFER_QUAD_INDICES);
 
-            quad = new VertexArray(FRAMEBUFFER_VERTEX_FORMAT);
+            quad = new VertexArray(FRAMEBUFFER_VERTEX_FORMAT.get());
             quad.data(vertices, 0, 0);
             quad.elementData(indices, VertexArray.IndexType.UNSIGNED_BYTE, FRAMEBUFFER_QUAD_INDICES.length);
 
@@ -303,7 +316,7 @@ public class Game {
             gBufferPositionTexture.label("GBuffer Position Texture");
 
             gBufferNormalTexture = new GPUTexture(GPUTexture.Target.TEXTURE_2D);
-            gBufferNormalTexture.storage(1, TextureFormat.RGBA16F, w, h);
+            gBufferNormalTexture.storage(1, TextureFormat.R11F_G11F_B10F, w, h);
             gBufferNormalTexture.minFilter(GPUTexture.MinFilter.NEAREST);
             gBufferNormalTexture.magFilter(GPUTexture.MagFilter.NEAREST);
             gBufferNormalTexture.label("GBuffer Normal Texture");
@@ -346,24 +359,28 @@ public class Game {
         shadowBlueNoiseTexture.wrapS(GPUTexture.Wrap.REPEAT);
         shadowBlueNoiseTexture.wrapT(GPUTexture.Wrap.REPEAT);
 
-        god = new Entity();
-        god.addComponent(new PhysxSceneComponent(physics));
-        god.addComponent(new SkyLightComponent(new DirectionalLight(new Vector3f(-2.0f, 4.0f, 1.0f).negate().normalize(), new Vector3f(1.0f, 1.0f, 1.0f))));
-        god.addComponent(new PBRManagerComponent(god));
+//        scene = new Scene();
+//
+//        god = new Entity();
+//        god.addComponent(new PhysxSceneComponent(physics));
+//        god.addComponent(new SkyLightComponent(new DirectionalLight(new Vector3f(-2.0f, 4.0f, 1.0f).negate().normalize(), new Vector3f(1.0f, 1.0f, 1.0f))));
+//        god.addComponent(new PBRManagerComponent(scene, god));
+//
+//        Entity floor = new Entity();
+//        PxRigidActor actor = PhysxActorCreateMemoryLeakinator.giveMeASuperActor(physics, assetManager, new AssetIdentifier("ground.obj"), CollisionFlags.WORLD.flag(), CollisionFlags.ALL.flag());
+//        floor.addComponent(new PhysxActorComponent(floor, actor));
+//        ModelRenderer modelRenderer = new ModelRenderer(new AssetIdentifier("ground.glb"));
+//        floor.addComponent(modelRenderer);
+//
+//        god.getComponent(PhysxSceneComponent.class).scene().addActor(actor);
+//
+//        scene.addRootEntity(god);
+//        scene.addRootEntity(floor);
+//        scene.load(assetManager);
 
-        Entity floor = new Entity();
-        PxRigidActor actor = PhysxActorCreateMemoryLeakinator.giveMeASuperActor(physics, assetManager, new AssetIdentifier("ground.obj"), CollisionFlags.WORLD.flag(), CollisionFlags.ALL.flag());
-        floor.addComponent(new PhysxActorComponent(floor, actor, true));
-        ModelRenderer modelRenderer = new ModelRenderer(new AssetIdentifier("ground.glb"));
-        floor.addComponent(modelRenderer);
-
-        god.getComponent(PhysxSceneComponent.class).scene().addActor(actor);
-
-        scene = new Scene();
-        scene.addRootEntity(god);
-        scene.addRootEntity(floor);
-
-        scene.load(assetManager);
+        scene = assetManager.loadSync(new AssetIdentifier("example_level.json5"), Scene.class).get();
+        god = scene.getByUUID(UUID.nameUUIDFromBytes("god".getBytes(StandardCharsets.UTF_8)));
+        if (god == null) throw new IllegalArgumentException("fuck");
 
         camera = new Camera(
                 new Vector3f(4.0f, 20.0f, 4.0f),
@@ -382,7 +399,7 @@ public class Game {
 
         font.writeAtlasToDisk(new File("font.png"));
 
-        this.player = new Player(scene, physics, god.getComponent(PhysxSceneComponent.class).scene(), camera, window.inputState());
+        this.player = new Player(physics, camera, window.inputState());
         this.soundManager = new SoundManager(player);
         this.soundSource = new SoundSource();
         this.sound = assetManager.loadSync(new AssetIdentifier("sound.wav"), Sound.class).get();
@@ -399,6 +416,8 @@ public class Game {
         window.focusWindow();
         window.requestAttention();
         this.soundSource.playSound(sound);
+
+        this.pause();
 
         while (!this.shouldClose()) {
             double time = GLFW.glfwGetTime();
@@ -431,7 +450,7 @@ public class Game {
 
         int steps = 0;
         while (accumulator >= fixedDeltaTime && steps < maxSubstepsPerFrame) {
-            god.getComponent(PhysxSceneComponent.class).scene().fixedUpdate((float) fixedDeltaTime);
+            physics.update((float) fixedDeltaTime, 1);
             player.fixedUpdate(fixedDeltaTime);
             scene.fixedUpdate((float) fixedDeltaTime);
 
@@ -707,7 +726,7 @@ public class Game {
         try (StateManager.DebugGroupPopper _ = StateManager.pushDebugGroup(DebugSource.SOURCE_APPLICATION, 6, "UI")) {
             try (Query.QueryEnder _ = passQueries[5].begin()) {
                 StateManager.enable(Capability.DEPTH_TEST);
-                god.getComponent(PhysxSceneComponent.class).scene().renderDebug(this.camera); // this is done here because it renders into the back-buffer, bypassing post-processing.
+//                god.getComponent(PhysxSceneComponent.class).scene().renderDebug(this.camera); // this is done here because it renders into the back-buffer, bypassing post-processing.
                 StateManager.disable(Capability.DEPTH_TEST);
 
                 StateManager.enable(Capability.BLEND);

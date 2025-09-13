@@ -1,5 +1,7 @@
 package net.flamgop.gpu.state;
 
+import org.lwjgl.glfw.GLFW;
+
 import static org.lwjgl.opengl.GL46.*;
 
 // opengl you are a huge fucking state machine
@@ -41,6 +43,13 @@ public class StateManager {
 
     public static void pixelStorei(PixelStore name, int i) {
         glPixelStorei(name.glQualifier, i);
+    }
+
+    // giant fucking state machine
+    // todo: write a monolith enum for this
+    public static int getStateInteger(int glQualifier) {
+        if (GLFW.glfwGetCurrentContext() == 0) return -1; // no current context
+        return glGetInteger(glQualifier);
     }
 
     public static class DebugGroupPopper implements AutoCloseable {

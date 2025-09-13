@@ -61,6 +61,7 @@ public class VertexArray {
     // I don't think there's a way to validate buffer against VertexFormat, as much as I'd like to.
     public void data(ByteBuffer data, int bindingIndex, int bufferOffset) {
         if (buffers[bindingIndex] != null) buffers[bindingIndex].destroy();
+        if (data.limit() % format.stride(bindingIndex) != 0) throw new IllegalArgumentException("Vertex data is not a multiple of the VertexFormat's stride!");
         GPUBuffer buffer = new GPUBuffer(GPUBuffer.BufferUsage.STATIC_DRAW);
         buffer.allocate(data);
 

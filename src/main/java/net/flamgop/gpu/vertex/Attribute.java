@@ -37,6 +37,11 @@ public record Attribute(Type type, int size, boolean normalized, int bindingInde
         final int byteCount;
         final boolean packed;
 
+        /**
+         * @param glQualifier OpenGL name
+         * @param byteCount number of bytes per element
+         * @param packed whether to multiply the byteCount by the size of the attribute or not, necessary for INT_2_10_10_10_REV, it's unsigned variant, and UNSIGNED_INT_10F_11F_11F_REV.
+         */
         Type(int glQualifier, int byteCount, boolean packed) {
             this.glQualifier = glQualifier;
             this.byteCount = byteCount;

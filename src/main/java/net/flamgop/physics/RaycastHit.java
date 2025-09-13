@@ -2,7 +2,6 @@ package net.flamgop.physics;
 
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
-import physx.physics.PxActor;
 
 /**
  *
@@ -10,7 +9,7 @@ import physx.physics.PxActor;
  * @param data the data of the hit, or null if there was no hit.
  */
 public record RaycastHit(boolean hit, @Nullable RaycastData data) {
-    public record RaycastData(PxActor actor, Vector3f position, Vector3f normal) {
+    public record RaycastData(Object actor, Vector3f position, Vector3f normal) {
 
     }
 }
