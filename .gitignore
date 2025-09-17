@@ -8,6 +8,7 @@ build/
 app/src/main/resources/statue.glb
 logs/
 *.log
+*.log.gz
 font.png
 joltjni.dll
 

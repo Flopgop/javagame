@@ -5,9 +5,19 @@
             <PatternLayout pattern="[%d{HH:mm:ss} %level]: [%logger] %msg%n%xEx{full}" />
         </Console>
 
-        <File name="File" fileName="logs/latest.log" append="true">
+        <RollingFile name="File"
+                     fileName="logs/latest.log"
+                     filePattern="logs/%d{yyyy-MM-dd_HH-mm-ss}.log.gz">
             <PatternLayout pattern="[%d{HH:mm:ss} %level]: [%logger] %msg%n%xEx{full}" />
-        </File>
+
+            <Policies>
+                <!-- Roll over at application startup -->
+                <OnStartupTriggeringPolicy />
+            </Policies>
+
+            <!-- Keep the last 30 rolled files -->
+            <DefaultRolloverStrategy max="30"/>
+        </RollingFile>
     </Appenders>
 
     <Loggers>
