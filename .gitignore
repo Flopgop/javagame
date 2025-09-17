@@ -6,6 +6,7 @@ build/
 
 ### semantics ###
 app/src/main/resources/statue.glb
+logs/
 *.log
 font.png
 joltjni.dll
