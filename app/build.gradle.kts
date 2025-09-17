@@ -80,4 +80,11 @@ dependencies {
     runtimeOnly("com.github.stephengold:jolt-jni-Windows64:3.1.0:DebugSp")
     implementation("io.github.electrostat-lab:snaploader:1.1.1-stable")
     runtimeOnly("com.github.oshi:oshi-core:6.8.3")
+
+    implementation("org.slf4j:slf4j-api:2.0.17")
+    implementation("org.apache.logging.log4j:log4j-api:2.25.1")
+    implementation("org.apache.logging.log4j:log4j-core:2.25.1")
+    implementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.25.1")
+
+    implementation(project(":renderdoc"))
 }

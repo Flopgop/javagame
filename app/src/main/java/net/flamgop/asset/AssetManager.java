@@ -1,5 +1,8 @@
 package net.flamgop.asset;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -8,6 +11,8 @@ import java.util.concurrent.Future;
 
 @SuppressWarnings("unchecked")
 public class AssetManager {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AssetManager.class);
+
     private final Map<AssetIdentifier, Asset<?>> cache = new ConcurrentHashMap<>();
     private final Map<Class<?>, Loader<?>> loaders = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
@@ -44,7 +49,7 @@ public class AssetManager {
         Loader<T> loader = (Loader<T>) loaders.get(type);
         if (loader == null) throw new RuntimeException("No loader registered for " + type);
 
-        System.out.println("Loading " + path + "...");
+        LOGGER.info("Loading {}...", path);
 
         T data = loader.load(path);
         if (data == null) return null;

@@ -5,9 +5,10 @@ build/
 !**/src/test/**/build/
 
 ### semantics ###
-src/main/resources/statue.glb
+app/src/main/resources/statue.glb
 *.log
 font.png
+joltjni.dll
 
 ### IntelliJ IDEA ###
 .idea/modules.xml

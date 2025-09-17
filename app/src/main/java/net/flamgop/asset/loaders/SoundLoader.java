@@ -7,6 +7,8 @@ import net.flamgop.util.ResourceHelper;
 import org.lwjgl.stb.STBVorbis;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -15,6 +17,8 @@ import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
 
 public class SoundLoader implements Loader<Sound> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(SoundLoader.class);
 
     public static int asciiToInt(String s, boolean bigEndian) {
         if (s.length() != 4) {
@@ -92,7 +96,7 @@ public class SoundLoader implements Loader<Sound> {
                 audioData.flip();
                 continue;
             }
-            System.out.println("Sound loader encountered weird WAV chunk: 0x" + Integer.toHexString(chunkId) + ", " + chunkSize);
+            LOGGER.warn("Sound loader encountered weird WAV chunk: 0x{}, {}", Integer.toHexString(chunkId), chunkSize);
             bytes.position(bytes.position() + chunkSize);
         }
 
@@ -140,12 +144,12 @@ public class SoundLoader implements Loader<Sound> {
             else if (extension.equals("ogg"))
                 return loadOgg(ResourceHelper.loadFileFromAssetsOrResources(filePath));
             else {
-                System.out.println("Tried to load unknown audio type: " + filePath);
+                LOGGER.warn("Tried to load unknown audio type: {}", filePath);
                 return null; // idk what this is
             }
 
         } else {
-            System.out.println("Tried to load invalid audio file: " + filePath);
+            LOGGER.warn("Tried to load invalid audio file: {}", filePath);
             return null;
         }
     }

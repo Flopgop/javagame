@@ -13,6 +13,8 @@ import net.flamgop.util.ResourceHelper;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 import org.lwjgl.assimp.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -22,6 +24,8 @@ import static org.lwjgl.opengl.GL46.*;
 
 @SuppressWarnings("DataFlowIssue")
 public class ModelLoader implements Loader<Model> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModelLoader.class);
 
     private static final int IMPORT_FLAGS =
             Assimp.aiProcess_Triangulate |
@@ -196,7 +200,7 @@ public class ModelLoader implements Loader<Model> {
                     texture = assetManager.<GPUTexture>get(pathIdentifier).get();
                 }
             } else {
-                System.out.println("Loading texture: " + texturePath);
+                LOGGER.info("Loading texture: {}", texturePath);
                 texture = assetManager.loadSync(new AssetIdentifier(texturePath), GPUTexture.class).get();
             }
         } else if (texIndex[0] >= 0) {
@@ -212,7 +216,7 @@ public class ModelLoader implements Loader<Model> {
                     texture = assetManager.<GPUTexture>get(pathIdentifier).get();
                 }
             } else {
-                System.out.println("Image data is uncompressed, I have no idea what to do with this!");
+                LOGGER.warn("Image data is uncompressed, I have no idea what to do with this!");
             }
         }
 

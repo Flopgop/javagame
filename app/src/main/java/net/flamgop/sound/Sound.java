@@ -1,10 +1,15 @@
 package net.flamgop.sound;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.ByteBuffer;
 
 import static org.lwjgl.openal.AL11.*;
 
 public class Sound {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Sound.class);
+
     private boolean valid;
     private final int buffer;
 
@@ -22,12 +27,12 @@ public class Sound {
             format = AL_FORMAT_STEREO16;
         else {
             this.valid = false;
-            System.out.println("Don't know what format this audio is, channels = " + channels + ", bitsPerSample = " + bitsPerSample);
+            LOGGER.error("Don't know what format this audio is, channels = {}, bitsPerSample = {}", channels, bitsPerSample);
             return;
         }
 
         if (format == AL_FORMAT_STEREO8 || format == AL_FORMAT_STEREO16)
-            System.out.println("Audio is stereo! OpenAL doesn't support spatialized stereo audio!");
+            LOGGER.warn("Audio is stereo! OpenAL doesn't support spatialized stereo audio!");
 
         alBufferData(buffer, format, soundData, sampleRate);
         this.valid = true;

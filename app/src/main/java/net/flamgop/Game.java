@@ -43,6 +43,8 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.renderdoc.api.RenderDoc;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -56,6 +58,8 @@ import java.util.UUID;
 public class Game {
 
     public static Game INSTANCE;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(Game.class);
 
     private static final LazyInit<VertexFormat> FRAMEBUFFER_VERTEX_FORMAT = new LazyInit<>(() -> VertexFormat.builder()
             .attribute(0, Attribute.of(Attribute.Type.FLOAT, 3, false))
@@ -176,7 +180,7 @@ public class Game {
             renderDoc.setCaptureOptionU32(RenderDoc.CaptureOption.ALLOW_UNSUPPORTED_VENDOR_EXTENSIONS, 1);
 
             RenderDoc.Version renderDocVersion = renderDoc.getApiVersion();
-            System.out.println("RenderDoc " + renderDocVersion.toString() + " loaded.");
+            LOGGER.info("RenderDoc {} loaded.", renderDocVersion.toString());
         }
 
         try {
@@ -302,7 +306,7 @@ public class Game {
             fb.texture(imgDepthTexture, GPUFramebuffer.Attachment.DEPTH_STENCIL, 0);
 
             fb.drawBuffers(new GPUFramebuffer.Attachment[]{GPUFramebuffer.Attachment.COLOR0});
-        }, (fb) -> {
+        }, (_) -> {
             imgTexture.destroy();
             imgDepthTexture.destroy();
         });
@@ -346,7 +350,7 @@ public class Game {
             fb.texture(gBufferDepthTexture, GPUFramebuffer.Attachment.DEPTH_STENCIL, 0);
 
             fb.drawBuffers(new GPUFramebuffer.Attachment[]{GPUFramebuffer.Attachment.COLOR0, GPUFramebuffer.Attachment.COLOR1, GPUFramebuffer.Attachment.COLOR2, GPUFramebuffer.Attachment.COLOR3});
-        }, (fb) -> {
+        }, (_) -> {
             gBufferPositionTexture.destroy();
             gBufferNormalTexture.destroy();
             gBufferColorTexture.destroy();
@@ -358,25 +362,6 @@ public class Game {
         shadowBlueNoiseTexture = assetManager.loadSync(new AssetIdentifier("bluenoise.png"), GPUTexture.class).get();
         shadowBlueNoiseTexture.wrapS(GPUTexture.Wrap.REPEAT);
         shadowBlueNoiseTexture.wrapT(GPUTexture.Wrap.REPEAT);
-
-//        scene = new Scene();
-//
-//        god = new Entity();
-//        god.addComponent(new PhysxSceneComponent(physics));
-//        god.addComponent(new SkyLightComponent(new DirectionalLight(new Vector3f(-2.0f, 4.0f, 1.0f).negate().normalize(), new Vector3f(1.0f, 1.0f, 1.0f))));
-//        god.addComponent(new PBRManagerComponent(scene, god));
-//
-//        Entity floor = new Entity();
-//        PxRigidActor actor = PhysxActorCreateMemoryLeakinator.giveMeASuperActor(physics, assetManager, new AssetIdentifier("ground.obj"), CollisionFlags.WORLD.flag(), CollisionFlags.ALL.flag());
-//        floor.addComponent(new PhysxActorComponent(floor, actor));
-//        ModelRenderer modelRenderer = new ModelRenderer(new AssetIdentifier("ground.glb"));
-//        floor.addComponent(modelRenderer);
-//
-//        god.getComponent(PhysxSceneComponent.class).scene().addActor(actor);
-//
-//        scene.addRootEntity(god);
-//        scene.addRootEntity(floor);
-//        scene.load(assetManager);
 
         scene = assetManager.loadSync(new AssetIdentifier("example_level.json5"), Scene.class).get();
         god = scene.getByUUID(UUID.nameUUIDFromBytes("god".getBytes(StandardCharsets.UTF_8)));
